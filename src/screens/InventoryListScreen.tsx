@@ -16,23 +16,49 @@ export default function InventoryListScreen() {
     // Runs whenever user location changes
     // Builds firestore query filtered by location, sorted by submitted date and only shows the most recent 
     useEffect(() => {
-        if (!user) return;
+        if (!user) {
+            setLines([]);
+            return;
+        }
 
+        console.log('Setting up Firestore listener for locationId:', user.locationId);
+
+        // Simplified query that doesn't require an index
         const q = query(
             collection(db, 'inventoryCounts'),
-            where('locationId', '==', user.locationId),
-            orderBy('submittedAt', 'desc'),
-            limit(1)
+            where('locationId', '==', user.locationId)
         );
 
         const unsub = onSnapshot(q, (s) => {
-            if (s.empty) {
+            console.log('Firestore snapshot received:', s);
+            
+            // Check if snapshot is null or has error
+            if (!s) {
+                console.error('Firestore snapshot is null');
                 setLines([]);
                 return;
             }
-            const doc = s.docs[0];
-            const data = doc.data() as { lines?: Line[] | undefined };
+            
+            if (s.empty) {
+                console.log('No inventory data found, setting empty lines');
+                setLines([]);
+                return;
+            }
+            
+            // Sort by submittedAt in JavaScript and get the most recent
+            const docs = s.docs.sort((a: any, b: any) => {
+                const aTime = a.data().submittedAt?.toMillis() || 0;
+                const bTime = b.data().submittedAt?.toMillis() || 0;
+                return bTime - aTime; // Most recent first
+            });
+            
+            const mostRecentDoc = docs[0];
+            const data = mostRecentDoc.data() as { lines?: Line[] | undefined };
+            console.log('Inventory data:', data);
             setLines(data.lines ?? []);
+        }, (error) => {
+            console.error('Firestore error:', error);
+            setLines([]);
         });
 
         return unsub;

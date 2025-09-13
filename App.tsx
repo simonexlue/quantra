@@ -6,15 +6,35 @@ import { AppProviders } from './src/app/AppProviders';
 import { AuthProvider } from './src/auth/useAuth';
 
 export default function App() {
-  return (
-    <AppProviders>
-      <AuthProvider>
-        <RootNavigator />
-      </AuthProvider>
-    </AppProviders>
-  );
+  try {
+    return (
+      <AppProviders>
+        <AuthProvider>
+          <RootNavigator />
+        </AuthProvider>
+      </AppProviders>
+    );
+  } catch (error) {
+    console.error('App Error:', error);
+    return (
+      <View style={styles.container}>
+        <Text style={styles.text}>App Error - Check Console</Text>
+        <StatusBar style="auto" />
+      </View>
+    );
+  }
 }
 
 const styles = StyleSheet.create({
-
+  container: {
+    flex: 1,
+    backgroundColor: '#fff',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  text: {
+    fontSize: 24,
+    fontWeight: 'bold',
+    color: '#333',
+  },
 });

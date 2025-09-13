@@ -14,30 +14,40 @@ export const AuthProvider: React.FC<{ children: React.ReactNode}> = ({ children 
     const [loading, setLoading] = useState(true);
 
     useEffect(() => {
-        const unsub = onAuthStateChanged(auth,async (user) => {
+        try {
+            const unsub = onAuthStateChanged(auth, async (user) => {
+                try {
+                    // User is not logged in
+                    if (!user) {
+                        setUser(null);
+                        setLoading(false);
+                        return;
+                    }
 
-            // User is not logged in
-            if (!user) {
-                setUser(null);
-                setLoading(false);
-                return;
-            }
+                    // User is logged in -> get profile from Firestore
+                    const userRef = doc(collection(db, 'users'), user.uid);
+                    const snap = await getDoc(userRef);
 
-            // User is logged in -> get profile from Firestore
-            const userRef = doc(collection(db, 'users'), user.uid);
-            const snap = await getDoc(userRef);
+                    // Reads with defaults 
+                    const userData = snap.data() as { role?: string; locationId?: string } | undefined;
+                    const role = snap.exists() ? (userData?.role ?? "crew") : "crew"; 
+                    const locationId = snap.exists() ? (userData?.locationId ?? "brewery-district") : "brewery-district";
 
-            // Reads with defaults 
-            const userData = snap.data() as { role?: string; locationId?: string } | undefined;
-            const role = snap.exists() ? (userData?.role ?? "crew") : "crew"; 
-            const locationId = snap.exists() ? (userData?.locationId ?? "brewery-district") : "brewery-district";
+                    setUser({ uid: user.uid, email: user.email, role: role as 'manager' | 'crew', locationId});
+                    setLoading(false);
+                } catch (error) {
+                    console.error('Auth error:', error);
+                    setUser(null);
+                    setLoading(false);
+                }
+            });
 
-            setUser({ uid: user.uid, email: user.email, role: role as 'manager' | 'crew', locationId});
+            // Clean up listener on unmount
+            return unsub;
+        } catch (error) {
+            console.error('Auth setup error:', error);
             setLoading(false);
-        });
-
-        // Clean up listener on unmount
-        return unsub;
+        }
     }, []);
 
     return <Context.Provider value={{ user, loading, signOut: () => authSignOut(auth) }}>{children}</Context.Provider>;
