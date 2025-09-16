@@ -19,7 +19,7 @@ export default function InventoryListScreen() {
       ItemSeparatorComponent={Divider}
       renderItem={({ item }) => (
         <List.Item
-          title={item.itemId}
+          title={item.itemName}
           right={() => (
             <View style={{ paddingRight: 12, flexDirection: 'row', alignItems: 'center' }}>
               <View style={{ width: 80 }}>
