@@ -1,11 +1,22 @@
 import { StatusBar } from 'expo-status-bar';
 import { StyleSheet, Text, View } from 'react-native';
-import React from 'react';
+import React, { useEffect } from 'react';
+import { getApp } from '@react-native-firebase/app';
 import RootNavigator from './src/app/navigation/RootNavigator';
 import { AppProviders } from './src/app/AppProviders';
 import { AuthProvider } from './src/auth/useAuth';
 
 export default function App() {
+  useEffect(() => {
+    try {
+      const options = getApp().options as any;
+      console.log('[debug] firebase options', {
+        projectId: options?.projectId,
+        appId: options?.appId,
+        apiKey: options?.apiKey ? '***' : undefined,
+      });
+    } catch {}
+  }, []);
   try {
     return (
       <AppProviders>

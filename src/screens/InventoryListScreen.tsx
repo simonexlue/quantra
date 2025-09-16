@@ -1,9 +1,11 @@
 import React, { useState, useEffect } from "react";
 import { FlatList, View } from 'react-native';
-import { List, Divider } from 'react-native-paper';
+import { ActivityIndicator, Text, List, Divider } from 'react-native-paper';
 import { db } from '../services/firebase';
 import { useAuth } from '../auth/useAuth';
 import { collection, query, where, orderBy, limit, onSnapshot } from "@react-native-firebase/firestore";
+import FlagPill from "../components/FlagPill";
+import { useInventory } from "../hooks/useInventory";
 
 
 type Line = { itemId: string; qty: number; flag?: 'ok'|'low'|'critical'|'out' };
@@ -21,7 +23,7 @@ export default function InventoryListScreen() {
             return;
         }
 
-        console.log('Setting up Firestore listener for locationId:', user.locationId);
+        // minimal logging
 
         // Simplified query that doesn't require an index
         const q = query(
@@ -30,17 +32,15 @@ export default function InventoryListScreen() {
         );
 
         const unsub = onSnapshot(q, (s) => {
-            console.log('Firestore snapshot received:', s);
             
             // Check if snapshot is null or has error
             if (!s) {
-                console.error('Firestore snapshot is null');
+                console.error('[debug] snapshot null');
                 setLines([]);
                 return;
             }
             
-            if (s.empty) {
-                console.log('No inventory data found, setting empty lines');
+            if (!s || s.docs.length === 0) {
                 setLines([]);
                 return;
             }
@@ -54,10 +54,9 @@ export default function InventoryListScreen() {
             
             const mostRecentDoc = docs[0];
             const data = mostRecentDoc.data() as { lines?: Line[] | undefined };
-            console.log('Inventory data:', data);
             setLines(data.lines ?? []);
         }, (error) => {
-            console.error('Firestore error:', error);
+            console.error('[debug] firestore error', error);
             setLines([]);
         });
 

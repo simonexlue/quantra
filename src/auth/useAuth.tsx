@@ -1,7 +1,7 @@
 import React, { createContext, useContext, useEffect, useState } from "react";
 import { auth, db } from "../services/firebase";
 import { onAuthStateChanged, signOut as authSignOut } from "@react-native-firebase/auth";
-import { collection, doc, getDoc} from "@react-native-firebase/firestore";
+import { collection, doc, getDoc, setDoc } from "@react-native-firebase/firestore";
 
 type AppUser = { uid: string; email: string | null; role: 'manager' | 'crew'; locationId: string; }
 type Context = { user: AppUser | null; loading: boolean; signOut: () => Promise<void>; }
@@ -28,10 +28,19 @@ export const AuthProvider: React.FC<{ children: React.ReactNode}> = ({ children 
                     const userRef = doc(collection(db, 'users'), user.uid);
                     const snap = await getDoc(userRef);
 
-                    // Reads with defaults 
-                    const userData = snap.data() as { role?: string; locationId?: string } | undefined;
-                    const role = snap.exists() ? (userData?.role ?? "crew") : "crew"; 
-                    const locationId = snap.exists() ? (userData?.locationId ?? "brewery-district") : "brewery-district";
+                    // Auto-provision user profile if missing (needed for Firestore rules)
+                    if (!snap.exists()) {
+                        await setDoc(userRef, {
+                            role: "crew",
+                            locationId: "brewery-district",
+                            email: user.email ?? null,
+                            createdAt: Date.now(),
+                        });
+                    }
+
+                    const userData = (await getDoc(userRef)).data() as { role?: string; locationId?: string } | undefined;
+                    const role = userData?.role ?? "crew";
+                    const locationId = userData?.locationId ?? "brewery-district";
 
                     setUser({ uid: user.uid, email: user.email, role: role as 'manager' | 'crew', locationId});
                     setLoading(false);
