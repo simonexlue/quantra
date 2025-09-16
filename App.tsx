@@ -7,16 +7,6 @@ import { AppProviders } from './src/app/AppProviders';
 import { AuthProvider } from './src/auth/useAuth';
 
 export default function App() {
-  useEffect(() => {
-    try {
-      const options = getApp().options as any;
-      console.log('[debug] firebase options', {
-        projectId: options?.projectId,
-        appId: options?.appId,
-        apiKey: options?.apiKey ? '***' : undefined,
-      });
-    } catch {}
-  }, []);
   try {
     return (
       <AppProviders>

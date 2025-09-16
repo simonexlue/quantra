@@ -37,7 +37,6 @@ export function useInventory(locationId?: string) {
                 rowsWithNames.sort((a: any, b: any) => a.itemName.localeCompare(b.itemName));
                 setRows(rowsWithNames as InventoryRowWithName[]);
             } catch (error) {
-                console.error('Error fetching catalog:', error);
                 // Fallback to itemId if catalog fetch fails
                 const fallbackRows = inventoryData.map((item: InventoryCountDoc) => ({
                     ...item,

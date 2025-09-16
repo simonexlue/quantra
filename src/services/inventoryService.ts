@@ -15,7 +15,6 @@ export async function saveSubmissionAndUpdateCounts(params: {
     const { locationId, updatedBy, lines } = params;
     const batch = writeBatch(db);
     const now = serverTimestamp();
-    console.log('[debug] starting save', { locationId, updatedBy, numLines: lines.length });
 
     // Add the submission in inventoryCounts collection
     const withFlags = lines.map(l => ({ ...l, flag: computeFlag(l.qty) }));
@@ -28,9 +27,7 @@ export async function saveSubmissionAndUpdateCounts(params: {
     };
     try {
         await addDoc(collection(db, COL.inventorySubmissions), submissionPayload);
-        console.log('[debug] submission created');
     } catch (e) {
-        console.error('[debug] submission create failed', e);
         throw e;
     }
 
@@ -46,9 +43,7 @@ export async function saveSubmissionAndUpdateCounts(params: {
 
     try {
         await batch.commit();
-        console.log('[debug] save complete');
     } catch (error) {
-        console.error('[debug] save failed', error);
         throw error;
     }
 }

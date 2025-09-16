@@ -1,6 +1,6 @@
 import React, { useEffect, useState, useMemo} from "react";
 import { View, FlatList, StyleSheet} from 'react-native';
-import { ActivityIndicator, Text, TextInput, Button, Divider} from 'react-native-paper';
+import { ActivityIndicator, Text, TextInput, Button, Card} from 'react-native-paper';
 import { useAuth } from "../auth/useAuth";
 import { fetchCatalog } from "../services/catalogService";
 import { saveSubmissionAndUpdateCounts } from "../services/inventoryService";
@@ -90,32 +90,38 @@ export default function InventoryInputScreen() {
           <Text style={{ opacity: 0.7, marginBottom: 10 }}>
             Edit only what changed. Unedited rows keep their last recorded amount.
           </Text>
-          <Divider />
+          <View style={{ height: 1, backgroundColor: '#e0e0e0', marginVertical: 16 }} />
     
           <FlatList
             data={items}
             keyExtractor={it => it.id}
-            ItemSeparatorComponent={Divider}
-            contentContainerStyle={{ paddingVertical: 8 }}
+            contentContainerStyle={styles.listContainer}
+            ItemSeparatorComponent={() => <View style={styles.separator} />}
             renderItem={({ item }) => {
               const placeholder =
                 currentQtyByItem[item.id] != null ? String(currentQtyByItem[item.id]) : '—';
               return (
-                <View style={styles.row}>
-                  <Text style={styles.label}>{item.name ?? item.id}</Text>
-                  <TextInput
-                    mode="outlined"
-                    keyboardType="numeric"
-                    placeholder={placeholder}
-                    value={drafts[item.id] ?? ''}
-                    onChangeText={(t) =>
-                      setDrafts(d => ({ ...d, [item.id]: t.replace(/[^\d.]/g, '') }))
-                    }
-                    style={styles.input}
-                    dense
-                  />
-                  <Text style={styles.unit}>{item.defaultUnit ?? 'each'}</Text>
-                </View>
+                <Card style={styles.card}>
+                  <Card.Content style={styles.cardContent}>
+                    <View style={styles.row}>
+                      <Text style={styles.label}>{item.name ?? item.id}</Text>
+                      <TextInput
+                        mode="outlined"
+                        keyboardType="numeric"
+                        placeholder={placeholder}
+                        value={drafts[item.id] ?? ''}
+                        onChangeText={(t) =>
+                          setDrafts(d => ({ ...d, [item.id]: t.replace(/[^\d.]/g, '') }))
+                        }
+                        style={styles.input}
+                        contentStyle={styles.inputContent}
+                        outlineStyle={styles.inputOutline}
+                        dense
+                      />
+                      <Text style={styles.unit}>{item.defaultUnit ?? 'each'}</Text>
+                    </View>
+                  </Card.Content>
+                </Card>
               );
             }}
           />
@@ -140,11 +146,29 @@ export default function InventoryInputScreen() {
       pad: { 
         padding: 24 
     },
+      listContainer: {
+        paddingVertical: 8,
+      },
+      card: {
+        marginHorizontal: 4,
+        elevation: 2, // Android shadow
+        shadowColor: '#000', // iOS shadow
+        shadowOffset: {
+          width: 0,
+          height: 1,
+        },
+        shadowOpacity: 0.05,
+        shadowRadius: 2,
+        backgroundColor: '#fff',
+      },
+      cardContent: {
+        paddingHorizontal: 16,
+        paddingVertical: 12,
+      },
       row: { 
         flexDirection: 'row', 
         alignItems: 'center', 
-        gap: 12, 
-        paddingVertical: 8 
+        gap: 12
     },
       label: { 
         flex: 1, 
@@ -153,7 +177,16 @@ export default function InventoryInputScreen() {
       input: { 
         width: 120 
     },
+      inputContent: {
+        borderRadius: 16,
+      },
+      inputOutline: {
+        borderRadius: 16,
+      },
       unit: { 
         width: 48, opacity: 0.6 
     },
+      separator: {
+        height: 8,
+      },
     });
