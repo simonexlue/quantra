@@ -4,7 +4,7 @@ import { COL} from '../constants/collections';
 import type { InventoryCountDoc } from '../types/inventory';
 import { db } from '../services/firebase';
 
-export function useInventory(locationId: string) {
+export function useInventory(locationId?: string) {
     const [rows, setRows] = useState<InventoryCountDoc[]>([]);
     const [loading, setLoading] = useState(true);
 
