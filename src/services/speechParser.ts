@@ -23,7 +23,6 @@ const FILTER_WORDS = [
 
 export function parseSpeechToLines(text: string, catalog: CatalogItem[]): InventorySubmissionLine[] {
     const lower = text.toLowerCase();
-    console.log('Parsing speech:', text);
 
     const results: InventorySubmissionLine[] = [];
 
@@ -32,9 +31,7 @@ export function parseSpeechToLines(text: string, catalog: CatalogItem[]): Invent
     
     // If that doesn't work, try to find number patterns in the whole text
     if (parts.length === 1) {
-        console.log('No separators found, trying to extract number patterns...');
         parts = extractNumberItems(lower);
-        console.log('Extracted parts:', parts);
     }
 
     // Track items by name for correction detection
@@ -51,7 +48,6 @@ export function parseSpeechToLines(text: string, catalog: CatalogItem[]): Invent
             qty = 0;
             const name = part.replace("out of", "").trim();
             matchedItem = findInCatalog(name, catalog);
-            console.log(`"out of" case: ${name} -> ${matchedItem?.name || 'NOT FOUND'}`);
         } else {
             // General case: starts with a number
             const match = part.match(/^(\d+)\s+(.+)$/);
@@ -59,7 +55,6 @@ export function parseSpeechToLines(text: string, catalog: CatalogItem[]): Invent
                 qty = parseInt(match[1], 10);
                 const name = match[2].trim();
                 matchedItem = findInCatalog(name, catalog);
-                console.log(`Number case: ${qty} ${name} -> ${matchedItem?.name || 'NOT FOUND'}`);
             } else {
                 // Word number case: "six radishes", "three tofu"
                 const wordNumberMatch = part.match(/^(one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve|thirteen|fourteen|fifteen|sixteen|seventeen|eighteen|nineteen|twenty|thirty|forty|fifty|sixty|seventy|eighty|ninety|hundred|thousand)\s+(.+)$/);
@@ -67,19 +62,12 @@ export function parseSpeechToLines(text: string, catalog: CatalogItem[]): Invent
                     qty = wordToNumber(wordNumberMatch[1]);
                     const name = wordNumberMatch[2].trim();
                     matchedItem = findInCatalog(name, catalog);
-                    console.log(`Word number case: ${wordNumberMatch[1]} (${qty}) ${name} -> ${matchedItem?.name || 'NOT FOUND'}`);
                 }
             }
         }
 
         if(matchedItem) {
             const safeQty = qty ?? 0;
-            
-            // Check for corrections (same item mentioned multiple times)
-            if (itemMap.has(matchedItem.id)) {
-                const previous = itemMap.get(matchedItem.id)!;
-                console.log(`Correction detected: ${matchedItem.name} ${previous.qty} → ${safeQty}`);
-            }
             
             // Store the latest quantity (corrections override previous values)
             itemMap.set(matchedItem.id, { qty: safeQty, item: matchedItem });
@@ -93,10 +81,8 @@ export function parseSpeechToLines(text: string, catalog: CatalogItem[]): Invent
             qty: qty,
             flag: computeFlag(qty),
         });
-        console.log(`Added: ${item.name} = ${qty}`);
     }
 
-    console.log(`Parsed ${results.length} items from "${text}"`);
     return results;
 }
 
@@ -125,7 +111,6 @@ function extractNumberItems(text: string): string[] {
                 const cleanedItemName = cleanItemName(itemName);
                 if (cleanedItemName) {
                     items.push(`${word} ${cleanedItemName}`);
-                    console.log(`Cleaned: "${itemName}" → "${cleanedItemName}"`);
                 }
                 i = j - 1; // Skip the words we just processed
             }
