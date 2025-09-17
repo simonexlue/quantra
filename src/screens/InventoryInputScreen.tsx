@@ -5,8 +5,10 @@ import { useAuth } from "../auth/useAuth";
 import { fetchCatalog } from "../services/catalogService";
 import { saveSubmissionAndUpdateCounts } from "../services/inventoryService";
 import { useInventory } from "../hooks/useInventory";
+import SpeechBar from "../components/SpeechBar";
+import { parseSpeechToLines } from "../services/speechParser";
+import type { CatalogItem } from "../types/catalog";
 
-type CatalogItem = { id: string; name?: string; defaultUnit?: string};
 
 export default function InventoryInputScreen() {
     const { user} = useAuth();
@@ -74,6 +76,21 @@ export default function InventoryInputScreen() {
         }
       }
 
+      function handleSpeechConfirm(text: string) {
+        if(!text.trim()) return;
+        const parsed = parseSpeechToLines(text, items);
+        if(!parsed.length) return; 
+
+        // Merge results into drafts so the TextInputs fill in automatically
+        setDrafts(d => {
+            const copy = { ...d};
+            for (const line of parsed) {
+                copy[line.itemId] = String(line.qty);
+            }
+            return copy;
+        })
+      }
+
       const loading = loadingCatalog || loadingInventory;
 
       if (!user) {
@@ -86,6 +103,8 @@ export default function InventoryInputScreen() {
 
       return (
         <View style={styles.container}>
+          <SpeechBar onConfirm={handleSpeechConfirm} />
+          <View style={{height:16}}/>
           <Text variant="titleLarge" style={{ marginBottom: 6 }}>Manual Inventory Entry</Text>
           <Text style={{ opacity: 0.7, marginBottom: 10 }}>
             Edit only what changed. Unedited rows keep their last recorded amount.
