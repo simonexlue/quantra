@@ -2,6 +2,18 @@ import { CatalogItem } from "../types/catalog";
 import { InventorySubmissionLine } from "../types/inventory";
 import { computeFlag } from "../constants/flags";
 
+// Common filter words to remove from speech
+const FILTER_WORDS = [
+  // Corrections
+  'wait', 'no', 'actually', 'sorry', 'correction', 'wrong', "scratch that",
+  // Filler words
+  'um', 'uh', 'er', 'ah', 'like', 'you know', 'so',
+  // Interruptions
+  'stop', 'cancel', 'nevermind', 'forget it', 'skip',
+  // Common speech artifacts
+  'the', 'a', 'an', 'and', 'or', 'but'
+];
+
 /** Parse spoken text into structured inventory lines
  * 
  * Example: "10 redonions, 5 cucumbers" 
@@ -24,6 +36,9 @@ export function parseSpeechToLines(text: string, catalog: CatalogItem[]): Invent
         parts = extractNumberItems(lower);
         console.log('Extracted parts:', parts);
     }
+
+    // Track items by name for correction detection
+    const itemMap = new Map<string, { qty: number; item: CatalogItem }>();
 
     for (const part of parts) {
         if (!part) continue;
@@ -59,13 +74,26 @@ export function parseSpeechToLines(text: string, catalog: CatalogItem[]): Invent
 
         if(matchedItem) {
             const safeQty = qty ?? 0;
-            results.push({
-                itemId: matchedItem.id,
-                qty: qty ?? 0,
-                flag: computeFlag(safeQty),
-            });
-            console.log(`Added: ${matchedItem.name} = ${qty ?? 0}`);
+            
+            // Check for corrections (same item mentioned multiple times)
+            if (itemMap.has(matchedItem.id)) {
+                const previous = itemMap.get(matchedItem.id)!;
+                console.log(`Correction detected: ${matchedItem.name} ${previous.qty} → ${safeQty}`);
+            }
+            
+            // Store the latest quantity (corrections override previous values)
+            itemMap.set(matchedItem.id, { qty: safeQty, item: matchedItem });
         }
+    }
+
+    // Convert map to results array
+    for (const [itemId, { qty, item }] of itemMap) {
+        results.push({
+            itemId: item.id,
+            qty: qty,
+            flag: computeFlag(qty),
+        });
+        console.log(`Added: ${item.name} = ${qty}`);
     }
 
     console.log(`Parsed ${results.length} items from "${text}"`);
@@ -93,13 +121,26 @@ function extractNumberItems(text: string): string[] {
             }
             
             if (itemName) {
-                items.push(`${word} ${itemName}`);
+                // Clean the item name by removing filter words
+                const cleanedItemName = cleanItemName(itemName);
+                if (cleanedItemName) {
+                    items.push(`${word} ${cleanedItemName}`);
+                    console.log(`Cleaned: "${itemName}" → "${cleanedItemName}"`);
+                }
                 i = j - 1; // Skip the words we just processed
             }
         }
     }
     
     return items;
+}
+
+function cleanItemName(itemName: string): string {
+    const words = itemName.split(/\s+/);
+    const cleanedWords = words.filter(word => 
+        !FILTER_WORDS.includes(word.toLowerCase()) && word.trim().length > 0
+    );
+    return cleanedWords.join(' ');
 }
 
 function isWordNumber(word: string): boolean {
