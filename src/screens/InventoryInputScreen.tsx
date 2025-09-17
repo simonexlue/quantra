@@ -1,11 +1,11 @@
 import React, { useEffect, useState, useMemo} from "react";
 import { View, FlatList, StyleSheet} from 'react-native';
-import { ActivityIndicator, Text, TextInput, Button, Card} from 'react-native-paper';
+import { ActivityIndicator, Text, TextInput, Button, Card, FAB} from 'react-native-paper';
 import { useAuth } from "../auth/useAuth";
 import { fetchCatalog } from "../services/catalogService";
 import { saveSubmissionAndUpdateCounts } from "../services/inventoryService";
 import { useInventory } from "../hooks/useInventory";
-import SpeechBar from "../components/SpeechBar";
+import SpeechModal from "../components/SpeechBar";
 import { parseSpeechToLines } from "../services/speechParser";
 import type { CatalogItem } from "../types/catalog";
 
@@ -23,6 +23,12 @@ export default function InventoryInputScreen() {
     // Text inputs (no blanks)
     const [saving, setSaving] = useState(false);
     const [drafts, setDrafts] = useState<Record<string, string>>({}); // itemId -> qty text
+    
+    // Speech modal
+    const [speechModalVisible, setSpeechModalVisible] = useState(false);
+    
+    // Track which inputs have been changed from their original values
+    const [changedInputs, setChangedInputs] = useState<Set<string>>(new Set());
 
     // Maps itemId -> current qty
     const currentQtyByItem = useMemo(() => {
@@ -71,6 +77,7 @@ export default function InventoryInputScreen() {
           setDrafts(d =>
             Object.fromEntries(Object.keys(d).map(k => [k, '']))
           );
+          setChangedInputs(new Set()); // Clear highlighting after successful save
         } finally {
           setSaving(false);
         }
@@ -81,6 +88,13 @@ export default function InventoryInputScreen() {
         const parsed = parseSpeechToLines(text, items);
         if(!parsed.length) return; 
 
+        // Track which items were changed
+        const changedItemIds = new Set(changedInputs);
+        for (const line of parsed) {
+            changedItemIds.add(line.itemId);
+        }
+        setChangedInputs(changedItemIds);
+
         // Merge results into drafts so the TextInputs fill in automatically
         setDrafts(d => {
             const copy = { ...d};
@@ -89,6 +103,25 @@ export default function InventoryInputScreen() {
             }
             return copy;
         })
+      }
+
+      function handleInputChange(itemId: string, value: string) {
+        // Track that this input has been changed
+        const originalValue = currentQtyByItem[itemId] != null ? String(currentQtyByItem[itemId]) : '';
+        const hasChanged = value !== originalValue;
+        
+        setChangedInputs(prev => {
+            const newSet = new Set(prev);
+            if (hasChanged) {
+                newSet.add(itemId);
+            } else {
+                newSet.delete(itemId);
+            }
+            return newSet;
+        });
+        
+        // Update the draft
+        setDrafts(d => ({ ...d, [itemId]: value }));
       }
 
       const loading = loadingCatalog || loadingInventory;
@@ -103,13 +136,23 @@ export default function InventoryInputScreen() {
 
       return (
         <View style={styles.container}>
-          <SpeechBar onConfirm={handleSpeechConfirm} />
-          <View style={{height:16}}/>
-          <Text variant="titleLarge" style={{ marginBottom: 6 }}>Manual Inventory Entry</Text>
-          <Text style={{ opacity: 0.7, marginBottom: 10 }}>
-            Edit only what changed. Unedited rows keep their last recorded amount.
-          </Text>
-          <View style={{ height: 1, backgroundColor: '#e0e0e0', marginVertical: 16 }} />
+          <View style={styles.header}>
+            <View style={styles.titleSection}>
+              <Text variant="titleLarge" style={{ marginBottom: 6 }}>Inventory Entry</Text>
+            </View>
+            <Button
+              mode="contained"
+              onPress={handleSave}
+              loading={saving}
+              disabled={saving || linesToSave.length === 0}
+              compact={true}
+              style={styles.saveButton}
+              contentStyle={styles.saveButtonContent}
+            >
+              Save
+            </Button>
+          </View>
+          <View style={{ height: 1, backgroundColor: '#e0e0e0', marginVertical: 0 }} />
     
           <FlatList
             data={items}
@@ -129,11 +172,18 @@ export default function InventoryInputScreen() {
                         keyboardType="numeric"
                         placeholder={placeholder}
                         value={drafts[item.id] ?? ''}
-                        onChangeText={(t) =>
-                          setDrafts(d => ({ ...d, [item.id]: t.replace(/[^\d.]/g, '') }))
-                        }
-                        style={styles.input}
-                        contentStyle={styles.inputContent}
+                        onChangeText={(t) => {
+                          const cleanValue = t.replace(/[^\d.]/g, '');
+                          handleInputChange(item.id, cleanValue);
+                        }}
+                        style={[
+                          styles.input,
+                          changedInputs.has(item.id) && styles.changedInput
+                        ]}
+                        contentStyle={[
+                          styles.inputContent,
+                          changedInputs.has(item.id) && styles.changedContent
+                        ]}
                         outlineStyle={styles.inputOutline}
                         dense
                       />
@@ -144,15 +194,18 @@ export default function InventoryInputScreen() {
               );
             }}
           />
-    
-          <Button
-            mode="contained"
-            onPress={handleSave}
-            loading={saving}
-            disabled={saving || linesToSave.length === 0}
-          >
-            Save
-          </Button>
+          
+          <FAB
+            icon="microphone"
+            style={styles.fab}
+            onPress={() => setSpeechModalVisible(true)}
+          />
+          
+          <SpeechModal
+            visible={speechModalVisible}
+            onDismiss={() => setSpeechModalVisible(false)}
+            onConfirm={handleSpeechConfirm}
+          />
         </View>
       );
     }
@@ -165,6 +218,24 @@ export default function InventoryInputScreen() {
       pad: { 
         padding: 24 
     },
+      header: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'flex-start',
+        marginBottom: 16,
+      },
+      titleSection: {
+        flex: 1,
+        marginRight: 16,
+      },
+      saveButton: {
+        alignSelf: 'flex-start',
+        borderRadius: 15,
+      },
+      saveButtonContent: {
+        paddingHorizontal: 8,
+        paddingVertical: 0,
+      },
       listContainer: {
         paddingVertical: 8,
       },
@@ -207,5 +278,17 @@ export default function InventoryInputScreen() {
     },
       separator: {
         height: 8,
+      },
+      fab: {
+        position: 'absolute',
+        margin: 16,
+        right: 0,
+        bottom: 0,
+      },
+      changedInput: {
+        backgroundColor: '#e3f2fd',
+      },
+      changedContent: {
+        backgroundColor: '#e3f2fd',
       },
     });
