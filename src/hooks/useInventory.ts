@@ -8,6 +8,7 @@ import { fetchCatalog } from '../services/catalogService';
 
 export type InventoryRowWithName = InventoryCountDoc & {
     itemName: string;
+    defaultUnit?: string;
 };
 
 export function useInventory(locationId?: string) {
@@ -27,12 +28,18 @@ export function useInventory(locationId?: string) {
             
             try {
                 const catalog = await fetchCatalog();
-                const catalogMap = new Map(catalog.map((item: CatalogItem) => [item.id, item.name]));
+                const catalogMap = new Map<string, { name: string; defaultUnit?: string }>(
+                    catalog.map((item: CatalogItem) => [item.id, { name: item.name, defaultUnit: item.defaultUnit }])
+                );
                 
-                const rowsWithNames = inventoryData.map((item: InventoryCountDoc) => ({
-                    ...item,
-                    itemName: catalogMap.get(item.itemId) || item.itemId // fallback to itemId if name not found
-                }));
+                const rowsWithNames = inventoryData.map((item: InventoryCountDoc) => {
+                    const catalogEntry = catalogMap.get(item.itemId);
+                    return {
+                        ...item,
+                        itemName: catalogEntry?.name || item.itemId, // fallback to itemId if name not found
+                        defaultUnit: catalogEntry?.defaultUnit,
+                    };
+                });
                 
                 rowsWithNames.sort((a: any, b: any) => a.itemName.localeCompare(b.itemName));
                 setRows(rowsWithNames as InventoryRowWithName[]);

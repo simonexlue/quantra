@@ -20,18 +20,12 @@ export default function InventoryListScreen() {
         <Card style={styles.card}>
           <Card.Content style={styles.cardContent}>
             <View style={styles.row}>
-              <View style={styles.itemInfo}>
-                <Text variant="titleMedium" style={styles.itemName}>
-                  {item.itemName}
-                </Text>
-              </View>
-              <View style={styles.rightSection}>
-                <View style={styles.quantityContainer}>
-                  <Text>Qty: {item.qty}</Text>
-                </View>
-                <View style={styles.flagContainer}>
-                  <FlagPill flag={item.flag} />
-                </View>
+              <Text variant="titleMedium" style={[styles.colName, styles.left]} numberOfLines={1}>
+                {item.itemName}
+              </Text>
+              <Text style={[styles.colQty, styles.left]}>{item.qty} {item.defaultUnit ?? 'each'}</Text>
+              <View style={styles.colFlag}>
+                <FlagPill flag={item.flag} />
               </View>
             </View>
           </Card.Content>
@@ -68,22 +62,20 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
   },
-  itemInfo: {
+  left: {
+    textAlign: 'left',
+  },
+  colName: {
     flex: 1,
-  },
-  itemName: {
     fontWeight: '500',
+    paddingRight: 8,
   },
-  rightSection: {
-    flexDirection: 'row',
-    alignItems: 'center',
+  colQty: {
+    width: 120, // widened to include unit inline
   },
-  quantityContainer: {
-    width: 80,
-  },
-  flagContainer: {
-    width: 50,
-    marginLeft: 8,
+  colFlag: {
+    width: 56,
+    alignItems: 'flex-start',
   },
   separator: {
     height: 8,
