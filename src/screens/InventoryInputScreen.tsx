@@ -29,6 +29,13 @@ export default function InventoryInputScreen() {
     
     // Track which inputs have been changed from their original values
     const [changedInputs, setChangedInputs] = useState<Set<string>>(new Set());
+    
+    // Track speech analysis for highlighting unrecognized text
+    const [speechAnalysis, setSpeechAnalysis] = useState<{
+      rawText: string;
+      unrecognizedParts: string[];
+      parsedItems: string[];
+    } | null>(null);
 
     // Maps itemId -> current qty
     const currentQtyByItem = useMemo(() => {
@@ -78,6 +85,7 @@ export default function InventoryInputScreen() {
             Object.fromEntries(Object.keys(d).map(k => [k, '']))
           );
           setChangedInputs(new Set()); // Clear highlighting after successful save
+          setSpeechAnalysis(null); // Clear speech analysis after successful save
         } finally {
           setSaving(false);
         }
@@ -86,6 +94,11 @@ export default function InventoryInputScreen() {
       function handleSpeechConfirm(text: string) {
         if(!text.trim()) return;
         const parsed = parseSpeechToLines(text, items);
+        
+        // Analyze speech for unrecognized parts
+        const analysis = analyzeSpeechText(text, parsed, items);
+        setSpeechAnalysis(analysis);
+        
         if(!parsed.length) return; 
 
         // Track which items were changed
@@ -103,6 +116,70 @@ export default function InventoryInputScreen() {
             }
             return copy;
         })
+      }
+
+      function analyzeSpeechText(rawText: string, parsed: any[], catalog: CatalogItem[]) {
+        const lowerText = rawText.toLowerCase();
+        const recognizedParts: string[] = [];
+        
+        // Collect all recognized item names and quantities
+        for (const line of parsed) {
+          const item = catalog.find(i => i.id === line.itemId);
+          if (item) {
+            recognizedParts.push(`${line.qty} ${item.name}`);
+            // Also check for synonyms
+            if (item.synonyms) {
+              item.synonyms.forEach(synonym => {
+                if (lowerText.includes(synonym.toLowerCase())) {
+                  recognizedParts.push(synonym);
+                }
+              });
+            }
+          }
+        }
+        
+        // Find unrecognized phrases (group consecutive unrecognized words)
+        const unrecognizedParts: string[] = [];
+        const words = lowerText.split(/\s+/);
+        
+        let currentPhrase: string[] = [];
+        
+        for (let i = 0; i < words.length; i++) {
+          const word = words[i];
+          
+          // Check if this word is recognized
+          const isRecognized = recognizedParts.some(part => 
+            part.toLowerCase().includes(word)
+          );
+          
+          // Skip common filter words
+          const isFilterWord = ['and', 'the', 'a', 'an', 'to', 'of', 'in', 'for', 'with', 'on'].includes(word);
+          
+          if (!isRecognized && !isFilterWord) {
+            // Add to current unrecognized phrase
+            currentPhrase.push(word);
+          } else {
+            // Word is recognized, finish current phrase if any
+            if (currentPhrase.length > 0) {
+              unrecognizedParts.push(currentPhrase.join(' '));
+              currentPhrase = [];
+            }
+          }
+        }
+        
+        // Don't forget the last phrase if it ends with unrecognized words
+        if (currentPhrase.length > 0) {
+          unrecognizedParts.push(currentPhrase.join(' '));
+        }
+        
+        return {
+          rawText,
+          unrecognizedParts,
+          parsedItems: parsed.map(p => {
+            const item = catalog.find(i => i.id === p.itemId);
+            return item ? `${p.qty} ${item.name}` : `${p.qty} ${p.itemId}`;
+          })
+        };
       }
 
       function handleInputChange(itemId: string, value: string) {
@@ -153,11 +230,27 @@ export default function InventoryInputScreen() {
             </Button>
           </View>
           <View style={{ height: 1, backgroundColor: '#e0e0e0', marginVertical: 0 }} />
+          
+          {speechAnalysis && speechAnalysis.unrecognizedParts.length > 0 && (
+            <View style={styles.speechAnalysis}>
+              <Text style={styles.speechAnalysisTitle}>Unrecognized Text</Text>
+              <View style={styles.speechTextContainer}>
+                <Text style={styles.speechText}>
+                  {speechAnalysis.unrecognizedParts.join(', ')}
+                </Text>
+              </View>
+              <Text style={styles.speechAnalysisNote}>
+                This text wasn't recognized. You may want to check these items manually.
+              </Text>
+            </View>
+          )}
     
           <FlatList
             data={items}
             keyExtractor={it => it.id}
+            style={{ flex: 1, width: '100%', alignSelf: 'stretch' }}
             contentContainerStyle={styles.listContainer}
+            scrollIndicatorInsets={{ right: -24 }}
             ItemSeparatorComponent={() => <View style={styles.separator} />}
             renderItem={({ item }) => {
               const placeholder =
@@ -290,5 +383,36 @@ export default function InventoryInputScreen() {
       },
       changedContent: {
         backgroundColor: '#e3f2fd',
+      },
+      speechAnalysis: {
+        backgroundColor: '#fff3cd',
+        borderColor: '#ffeaa7',
+        borderWidth: 1,
+        borderRadius: 8,
+        padding: 12,
+        marginHorizontal: 24,
+        marginBottom: 8,
+      },
+      speechAnalysisTitle: {
+        fontSize: 14,
+        fontWeight: '600',
+        color: '#856404',
+        marginBottom: 8,
+      },
+      speechTextContainer: {
+        backgroundColor: '#fff',
+        borderRadius: 4,
+        padding: 8,
+        marginBottom: 8,
+      },
+      speechText: {
+        fontSize: 13,
+        lineHeight: 18,
+        color: '#333',
+      },
+      speechAnalysisNote: {
+        fontSize: 11,
+        color: '#856404',
+        fontStyle: 'italic',
       },
     });

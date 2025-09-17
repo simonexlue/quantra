@@ -1,22 +1,87 @@
-import React from "react";
+import React, { useState, useEffect } from "react";
 import { FlatList, View, StyleSheet } from "react-native";
 import { ActivityIndicator, Card, Text } from "react-native-paper";
 import { useAuth } from "../auth/useAuth";
 import { useInventory } from "../hooks/useInventory";
 import FlagPill from "../components/FlagPill";
+import { doc, getDoc, collection } from "@react-native-firebase/firestore";
+import { db } from "../services/firebase";
 
 export default function InventoryListScreen() {
   const { user } = useAuth();
-  const { rows, loading } = useInventory(user?.locationId); // reads currentInventory
+  const { rows, loading } = useInventory(user?.locationId); // reads currentInventory which has updatedBy and updatedAt
+  const [lastUpdateUserName, setLastUpdateUserName] = useState<string>('');
+
+  // Fetch user name for the most recent update only
+  useEffect(() => {
+    const fetchLastUpdateUserName = async () => {
+      if (rows.length === 0) return;
+      
+      // Find the most recent update
+      const mostRecent = rows.reduce((latest, current) => {
+        const latestTime = latest.updatedAt?.toDate?.() || new Date(latest.updatedAt || 0);
+        const currentTime = current.updatedAt?.toDate?.() || new Date(current.updatedAt || 0);
+        return currentTime > latestTime ? current : latest;
+      });
+      
+      // Only fetch the name for this one user
+      try {
+        const userRef = doc(collection(db, 'users'), mostRecent.updatedBy);
+        const userSnap = await getDoc(userRef);
+        if (userSnap.exists()) {
+          const userData = userSnap.data() as any;
+          setLastUpdateUserName(userData.name || userData.email || mostRecent.updatedBy);
+        } else {
+          setLastUpdateUserName(mostRecent.updatedBy);
+        }
+      } catch (error) {
+        setLastUpdateUserName(mostRecent.updatedBy);
+      }
+    };
+
+    fetchLastUpdateUserName();
+  }, [rows]);
 
   if (!user) return <View style={{ padding: 24 }}><Text>Sign in required.</Text></View>;
   if (loading) return <View style={{ padding: 24 }}><ActivityIndicator /></View>;
 
+  // Find the most recent update
+  const getLastUpdateInfo = () => {
+    if (rows.length === 0) return null;
+    
+    return rows.reduce((latest, current) => {
+      // Compare raw timestamp values first 
+      const latestTime = latest.updatedAt?.seconds || 0;
+      const currentTime = current.updatedAt?.seconds || 0;
+      
+      if (currentTime > latestTime) {
+        return current;
+      }
+      return latest;
+    });
+  };
+
+  const lastUpdate = getLastUpdateInfo();
+
+  const formatDate = (timestamp: any) => {
+    if (!timestamp) return 'Unknown';
+    const date = timestamp.toDate?.() || new Date(timestamp);
+    return date.toLocaleString();
+  };
+
   return (
-    <FlatList
-      data={rows} // [{ itemId, qty, flag, locationId, ... }]
-      keyExtractor={(it) => `${it.locationId}_${it.itemId}`}
-      renderItem={({ item }) => (
+    <>
+      {lastUpdate && (
+        <View style={styles.header}>
+          <Text style={styles.lastUpdate}>
+            Last updated: {formatDate(lastUpdate.updatedAt)} by {lastUpdateUserName || lastUpdate.updatedBy}
+          </Text>
+        </View>
+      )}
+      <FlatList
+        data={rows} // [{ itemId, qty, flag, locationId, ... }]
+        keyExtractor={(it) => `${it.locationId}_${it.itemId}`}
+        renderItem={({ item }) => (
         <Card style={styles.card}>
           <Card.Content style={styles.cardContent}>
             <View style={styles.row}>
@@ -31,15 +96,27 @@ export default function InventoryListScreen() {
           </Card.Content>
         </Card>
       )}
-      contentContainerStyle={styles.listContainer}
-      ItemSeparatorComponent={() => <View style={styles.separator} />}
-    />
+        contentContainerStyle={styles.listContainer}
+        ItemSeparatorComponent={() => <View style={styles.separator} />}
+      />
+    </>
   );
 }
 
 const styles = StyleSheet.create({
+  header: {
+    paddingHorizontal: 24, 
+    paddingVertical: 16,
+    paddingBottom: 8,
+  },
+  lastUpdate: {
+    fontSize: 12,
+    opacity: 0.6,
+    color: '#666',
+  },
   listContainer: {
     padding: 16,
+    paddingTop: 8,
   },
   card: {
     marginHorizontal: 4,
