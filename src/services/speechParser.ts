@@ -147,13 +147,49 @@ function wordToNumber(word: string): number {
     return numbers[word.toLowerCase()] || 0;
 }
 
-function findInCatalog(name: string, catalog: CatalogItem[]): CatalogItem | null {
+function normalize(s: string) {
+    return s.trim().toLowerCase();
+  }
+  
+  function singularize(word: string) {
+    // helps with avocadoes/tomatoes/berries
+    if (word.endsWith('ies')) return word.slice(0, -3) + 'y';
+    if (word.endsWith('oes')) return word.slice(0, -2);
+    if (word.endsWith('ses')) return word.slice(0, -2);
+    if (word.endsWith('s'))   return word.slice(0, -1);
+    return word;
+  }
+  
+  function toArraySynonyms(syn: unknown): string[] {
+    if (Array.isArray(syn)) return syn;
+    if (typeof syn === 'string') {
+      return syn
+        .split(/[,|]/)           // allow comma/pipe separated strings
+        .map((x) => x.trim())
+        .filter(Boolean);
+    }
+    return [];
+  }
+  
+  function findInCatalog(name: string, catalog: CatalogItem[]): CatalogItem | null {
+    const n = normalize(name);
+    const nSing = singularize(n);
+  
     for (const item of catalog) {
-        if (item.name.toLowerCase() === name) return item;
-        if (item.synonyms?.some((s) => s.toLowerCase() === name)) return item;
-        // Plural check
-        if (item.name.toLowerCase() + "s" === name) return item;
+      const base = normalize(item.name ?? item.id);
+      const bases = [base, singularize(base), base + 's'];
+  
+      // base name / simple plural matches
+      if (bases.includes(n) || bases.includes(nSing)) return item;
+  
+      // SAFE synonyms (arrayified)
+      const syns = toArraySynonyms(item.synonyms).map(normalize);
+      for (const s of syns) {
+        const forms = [s, singularize(s), s + 's'];
+        if (forms.includes(n) || forms.includes(nSing)) return item;
+      }
     }
     return null;
-}
+  }
+  
 

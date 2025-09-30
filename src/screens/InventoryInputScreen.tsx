@@ -1,6 +1,6 @@
 import React, { useEffect, useState, useMemo} from "react";
 import { View, FlatList, StyleSheet} from 'react-native';
-import { ActivityIndicator, Text, TextInput, Button, Card, FAB} from 'react-native-paper';
+import { ActivityIndicator, Text, TextInput, Button, Card} from 'react-native-paper';
 import { useAuth } from "../auth/useAuth";
 import { fetchCatalog } from "../services/catalogService";
 import { saveSubmissionAndUpdateCounts } from "../services/inventoryService";
@@ -8,6 +8,8 @@ import { useInventory } from "../hooks/useInventory";
 import SpeechModal from "../components/SpeechBar";
 import { parseSpeechToLines } from "../services/speechParser";
 import type { CatalogItem } from "../types/catalog";
+import MicButton from "../components/MicButton";
+import ConfirmChipsSheet from "../components/ConfirmChipsSheet";
 
 
 export default function InventoryInputScreen() {
@@ -29,6 +31,10 @@ export default function InventoryInputScreen() {
     
     // Track which inputs have been changed from their original values
     const [changedInputs, setChangedInputs] = useState<Set<string>>(new Set());
+
+    // Confirm chips sheet
+    const [confirmVisible, setConfirmVisible] = useState(false);
+    const [pendingParsed, setPendingParsed] = useState<{ itemId: string; qty: number }[]>([]);
     
     // Track speech analysis for highlighting unrecognized text
     const [speechAnalysis, setSpeechAnalysis] = useState<{
@@ -47,7 +53,7 @@ export default function InventoryInputScreen() {
     // Load catalog once
     useEffect(() => {
         fetchCatalog()
-            .then((arr: any[]) => {
+            .then((arr: CatalogItem[]) => {
                 const sorted = [...arr].sort((a, b) => (a.name ?? a.id).localeCompare(b.name ?? b.id));
                 setItems(sorted);
                 setDrafts(Object.fromEntries(sorted.map((it) => [it.id, '']))); // Blank template for each item
@@ -81,9 +87,13 @@ export default function InventoryInputScreen() {
             lines: linesToSave,
           });
           // After a successful save, clear only the rows you edited so the placeholders (current counts) show again
-          setDrafts(d =>
-            Object.fromEntries(Object.keys(d).map(k => [k, '']))
-          );
+          setDrafts(d => {
+            const copy = { ...d };
+            for (const { itemId } of linesToSave) {
+              copy[itemId] = '';
+            }
+            return copy;
+          });
           setChangedInputs(new Set()); // Clear highlighting after successful save
           setSpeechAnalysis(null); // Clear speech analysis after successful save
         } finally {
@@ -92,30 +102,33 @@ export default function InventoryInputScreen() {
       }
 
       function handleSpeechConfirm(text: string) {
-        if(!text.trim()) return;
+        if (!text.trim()) return;
         const parsed = parseSpeechToLines(text, items);
-        
-        // Analyze speech for unrecognized parts
+      
         const analysis = analyzeSpeechText(text, parsed, items);
         setSpeechAnalysis(analysis);
-        
-        if(!parsed.length) return; 
+      
+        if (!parsed.length) return;
+      
+        // Don't write into drafts yet — let the user review first
+        setPendingParsed(parsed);
+        setConfirmVisible(true);
+      }
 
-        // Track which items were changed
+      function applyApprovedLines(approved: { itemId: string; qty: number }[]) {
+        // track changed inputs
         const changedItemIds = new Set(changedInputs);
-        for (const line of parsed) {
-            changedItemIds.add(line.itemId);
-        }
+        for (const line of approved) changedItemIds.add(line.itemId);
         setChangedInputs(changedItemIds);
-
-        // Merge results into drafts so the TextInputs fill in automatically
+      
+        // merge into drafts
         setDrafts(d => {
-            const copy = { ...d};
-            for (const line of parsed) {
-                copy[line.itemId] = String(line.qty);
-            }
-            return copy;
-        })
+          const copy = { ...d };
+          for (const line of approved) {
+            copy[line.itemId] = String(line.qty);
+          }
+          return copy;
+        });
       }
 
       function analyzeSpeechText(rawText: string, parsed: any[], catalog: CatalogItem[]) {
@@ -287,11 +300,18 @@ export default function InventoryInputScreen() {
               );
             }}
           />
+
+          <ConfirmChipsSheet
+            visible={confirmVisible}
+            onDismiss={() => setConfirmVisible(false)}
+            parsed={pendingParsed}
+            catalog={items}
+            onApply={applyApprovedLines}
+          />
           
-          <FAB
-            icon="microphone"
-            style={styles.fab}
+          <MicButton
             onPress={() => setSpeechModalVisible(true)}
+            label="Speak"
           />
           
           <SpeechModal
