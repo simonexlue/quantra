@@ -1,6 +1,6 @@
 import React, { useEffect, useState, useMemo} from "react";
-import { View, FlatList, StyleSheet} from 'react-native';
-import { ActivityIndicator, Text, TextInput, Button, Card} from 'react-native-paper';
+import { View, FlatList, StyleSheet, TouchableOpacity} from 'react-native';
+import { ActivityIndicator, Text, TextInput, Button, Card, IconButton} from 'react-native-paper';
 import { useAuth } from "../auth/useAuth";
 import { fetchCatalog } from "../services/catalogService";
 import { saveSubmissionAndUpdateCounts } from "../services/inventoryService";
@@ -246,7 +246,15 @@ export default function InventoryInputScreen() {
           
           {speechAnalysis && speechAnalysis.unrecognizedParts.length > 0 && (
             <View style={styles.speechAnalysis}>
-              <Text style={styles.speechAnalysisTitle}>Unrecognized Text</Text>
+              <View style={styles.speechAnalysisHeader}>
+                <Text style={styles.speechAnalysisTitle}>Unrecognized Text</Text>
+                <IconButton
+                  icon="close"
+                  size={20}
+                  onPress={() => setSpeechAnalysis(null)}
+                  style={styles.dismissButton}
+                />
+              </View>
               <View style={styles.speechTextContainer}>
                 <Text style={styles.speechText}>
                   {speechAnalysis.unrecognizedParts.join(', ')}
@@ -378,7 +386,7 @@ export default function InventoryInputScreen() {
         fontSize: 16 
     },
       input: { 
-        width: 120 
+        width: 80 
     },
       inputContent: {
         borderRadius: 16,
@@ -387,7 +395,7 @@ export default function InventoryInputScreen() {
         borderRadius: 16,
       },
       unit: { 
-        width: 48, opacity: 0.6 
+        width: 70, opacity: 0.6 
     },
       separator: {
         height: 8,
@@ -410,14 +418,25 @@ export default function InventoryInputScreen() {
         borderWidth: 1,
         borderRadius: 8,
         padding: 12,
-        marginHorizontal: 24,
+        marginHorizontal: 4,
+        marginBottom: 8,
+      },
+      speechAnalysisHeader: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'center',
         marginBottom: 8,
       },
       speechAnalysisTitle: {
         fontSize: 14,
         fontWeight: '600',
         color: '#856404',
-        marginBottom: 8,
+        flex: 1,
+      },
+      dismissButton: {
+        margin: 0,
+        width: 20,
+        height: 20,
       },
       speechTextContainer: {
         backgroundColor: '#fff',
