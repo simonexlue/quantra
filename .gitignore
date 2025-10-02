@@ -59,3 +59,14 @@ ios/build/
 ios/*.xcworkspace
 ios/quantra.xcworkspace/
 ios/DerivedData/
+
+# Android generated icons/splash
+android/app/src/main/res/mipmap-*
+android/app/src/main/res/drawable*/ic_launcher*
+android/app/src/main/res/drawable*/splashscreen*
+android/app/src/main/res/values*/splashscreen.xml
+
+# iOS generated icons/splash
+ios/**/Images.xcassets/AppIcon.appiconset/*
+ios/**/Images.xcassets/SplashScreen.imageset/*
+ios/**/Images.xcassets/LaunchImage.launchimage/*

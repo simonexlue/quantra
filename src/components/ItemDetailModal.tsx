@@ -141,7 +141,6 @@ export default function ItemDetailModal({
 
       onDismiss();
     } catch (error) {
-      console.error('Error in ItemDetailModal onSave:', error);
       throw error;
     } finally {
       setSaving(false);

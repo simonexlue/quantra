@@ -74,10 +74,8 @@ export function subscribeLocationOverrides(
         const dt = d.data() as any;
         if (typeof dt.lowThreshold === 'number') {
           map[d.id] = { lowThreshold: dt.lowThreshold };
-          console.log(`Subscribed override for ${d.id}: ${dt.lowThreshold}`);
         }
       });
-      console.log(`Subscribed overrides for location ${locationId}:`, map);
       cb(map);
     });
   }
@@ -92,11 +90,9 @@ export async function fetchLocationOverrides(locationId: string): Promise<Locati
       const dt = d.data() as any;
       if (typeof dt.lowThreshold === 'number') {
         byId[d.id] = { lowThreshold: dt.lowThreshold };
-        console.log(`Found override for ${d.id}: ${dt.lowThreshold}`);
       }
     });
   }
-  console.log(`Fetched overrides for location ${locationId}:`, byId);
   return byId;
 }
 
