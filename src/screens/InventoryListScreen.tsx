@@ -6,12 +6,27 @@ import { useInventory } from "../hooks/useInventory";
 import FlagPill from "../components/FlagPill";
 import { doc, getDoc, collection } from "@react-native-firebase/firestore";
 import { db } from "../services/firebase";
+import ItemDetailModal from "../components/ItemDetailModal";
+import { subscribeLocationOverrides } from "../services/inventoryService";
+import { computeFlag } from "../constants/flags";
 
 export default function InventoryListScreen() {
   const { user } = useAuth();
   const { rows, loading } = useInventory(user?.locationId); // reads currentInventory which has updatedBy and updatedAt
   const [lastUpdateUserName, setLastUpdateUserName] = useState<string>('');
 
+  // Item detail modal
+  const [modalOpen, setModalOpen] = useState(false);
+  const [selectedItemId, setSelectedItemId] = useState<string|null>(null);
+  const [overrides, setOverrides] = useState<Record<string, { lowThreshold: number }>>({});
+
+  //location overrides
+  useEffect(() => {
+    if (!user?.locationId) return;
+    const unsub = subscribeLocationOverrides(user.locationId, setOverrides);
+    return unsub;
+  }, [user?.locationId]);
+  
   // Fetch user name for the most recent update only
   useEffect(() => {
     const fetchLastUpdateUserName = async () => {
@@ -82,7 +97,12 @@ export default function InventoryListScreen() {
         data={rows} // [{ itemId, qty, flag, locationId, ... }]
         keyExtractor={(it) => `${it.locationId}_${it.itemId}`}
         renderItem={({ item }) => (
-        <Card style={styles.card}>
+        <Card 
+          style={styles.card}
+          onPress={() => {
+            setSelectedItemId(item.itemId);
+            setModalOpen(true);
+          }}>
           <Card.Content style={styles.cardContent}>
             <View style={styles.row}>
               <Text variant="titleMedium" style={[styles.colName, styles.left]} numberOfLines={1}>
@@ -90,7 +110,7 @@ export default function InventoryListScreen() {
               </Text>
               <Text style={[styles.colQty, styles.left]}>{item.qty} {item.defaultUnit ?? 'each'}</Text>
               <View style={styles.colFlag}>
-                <FlagPill flag={item.flag} />
+                <FlagPill flag={computeFlag(item.qty, { low: overrides[item.itemId]?.lowThreshold })} />
               </View>
             </View>
           </Card.Content>
@@ -98,6 +118,14 @@ export default function InventoryListScreen() {
       )}
         contentContainerStyle={styles.listContainer}
         ItemSeparatorComponent={() => <View style={styles.separator} />}
+        keyboardShouldPersistTaps="handled"
+      />
+      <ItemDetailModal
+        visible={modalOpen}
+        onDismiss={() => setModalOpen(false)}
+        itemId={selectedItemId}
+        locationId={user!.locationId}
+        canEditGlobal={user?.role === 'manager'}
       />
     </>
   );

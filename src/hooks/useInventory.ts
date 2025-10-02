@@ -4,7 +4,6 @@ import { COL} from '../constants/collections';
 import type { InventoryCountDoc } from '../types/inventory';
 import type { CatalogItem } from '../types/catalog';
 import { db } from '../services/firebase';
-import { fetchCatalog } from '../services/catalogService';
 
 export type InventoryRowWithName = InventoryCountDoc & {
     itemName: string;
@@ -14,6 +13,16 @@ export type InventoryRowWithName = InventoryCountDoc & {
 export function useInventory(locationId?: string) {
     const [rows, setRows] = useState<InventoryRowWithName[]>([]);
     const [loading, setLoading] = useState(true);
+    const [catalog, setCatalog] = useState<CatalogItem[]>([]);
+
+    // Subscribe to real-time catalog updates
+    useEffect(() => {
+        const catalogUnsub = onSnapshot(collection(db, COL.items), (snap) => {
+            const catalogData = snap.docs.map((d: any) => ({ id: d.id, ...(d.data() as any) })) as CatalogItem[];
+            setCatalog(catalogData);
+        });
+        return catalogUnsub;
+    }, []);
 
     useEffect(()=> {
         if(!locationId) return;
@@ -23,40 +32,29 @@ export function useInventory(locationId?: string) {
             where('locationId', '==', locationId)
         );
 
-        const unsub = onSnapshot(q, async (snap) => {
+        const unsub = onSnapshot(q, (snap) => {
             const inventoryData = snap.docs.map((d: any) => ({ id: d.id, ...(d.data() as any)}));
             
-            try {
-                const catalog = await fetchCatalog();
-                const catalogMap = new Map<string, { name: string; defaultUnit?: string }>(
-                    catalog.map((item: CatalogItem) => [item.id, { name: item.name, defaultUnit: item.defaultUnit }])
-                );
-                
-                const rowsWithNames = inventoryData.map((item: InventoryCountDoc) => {
-                    const catalogEntry = catalogMap.get(item.itemId);
-                    return {
-                        ...item,
-                        itemName: catalogEntry?.name || item.itemId, // fallback to itemId if name not found
-                        defaultUnit: catalogEntry?.defaultUnit,
-                    };
-                });
-                
-                rowsWithNames.sort((a: any, b: any) => a.itemName.localeCompare(b.itemName));
-                setRows(rowsWithNames as InventoryRowWithName[]);
-            } catch (error) {
-                // Fallback to itemId if catalog fetch fails
-                const fallbackRows = inventoryData.map((item: InventoryCountDoc) => ({
-                    ...item,
-                    itemName: item.itemId
-                }));
-                fallbackRows.sort((a: any, b: any) => a.itemId.localeCompare(b.itemId));
-                setRows(fallbackRows as InventoryRowWithName[]);
-            }
+            // Create catalog map from real-time catalog data
+            const catalogMap = new Map<string, { name: string; defaultUnit?: string }>(
+                catalog.map((item: CatalogItem) => [item.id, { name: item.name, defaultUnit: item.defaultUnit }])
+            );
             
+            const rowsWithNames = inventoryData.map((item: InventoryCountDoc) => {
+                const catalogEntry = catalogMap.get(item.itemId);
+                return {
+                    ...item,
+                    itemName: catalogEntry?.name || item.itemId, // fallback to itemId if name not found
+                    defaultUnit: catalogEntry?.defaultUnit,
+                };
+            });
+            
+            rowsWithNames.sort((a: any, b: any) => a.itemName.localeCompare(b.itemName));
+            setRows(rowsWithNames as InventoryRowWithName[]);
             setLoading(false);
         });
         return unsub;
-    }, [locationId]);
+    }, [locationId, catalog]);
 
     return { rows, loading };
 }
