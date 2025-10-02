@@ -1,9 +1,10 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { View, StyleSheet, ScrollView, TouchableOpacity } from 'react-native';
+import { View, StyleSheet, ScrollView, TouchableOpacity, Keyboard, Platform } from 'react-native';
 import {
   Portal, Dialog, Button, Text, TextInput,
   Menu, Divider, ActivityIndicator
 } from 'react-native-paper';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import {
   collection, doc, getDoc, updateDoc
 } from '@react-native-firebase/firestore';
@@ -47,6 +48,19 @@ export default function ItemDetailModal({
     if (lowThreshold.trim() === '') return true;
     return /^\d+$/.test(lowThreshold.trim());
   }, [lowThreshold]);
+
+  const [kbHeight, setKbHeight] = useState(0);
+  useEffect(() => {
+    const showEvt = Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow';
+    const hideEvt = Platform.OS === 'ios' ? 'keyboardWillHide' : 'keyboardDidHide';
+    const s = Keyboard.addListener(showEvt, e => setKbHeight(e?.endCoordinates?.height ?? 0));
+    const h = Keyboard.addListener(hideEvt, () => setKbHeight(0));
+    return () => { s.remove(); h.remove(); };
+  }, []);
+  
+  // safe area
+  const insets = useSafeAreaInsets();
+  const bottomBump = Platform.OS === 'ios' ? Math.max(0, kbHeight - insets.bottom) : kbHeight;
 
   useEffect(() => {
     let mounted = true;
@@ -136,160 +150,169 @@ export default function ItemDetailModal({
 
   return (
     <Portal>
-      <Dialog visible={visible} onDismiss={onDismiss} style={styles.dialog}>
+      <Dialog
+        visible={visible}
+        onDismiss={onDismiss}
+        style={[styles.dialog, bottomBump ? { marginBottom: bottomBump } : null]}
+      >
         <Dialog.Content>
-            {loading ? (
-                <View style={{ paddingVertical: 12, alignItems: 'center' }}>
-                <ActivityIndicator />
-                </View>
-            ) : (
+          {loading ? (
+            <View style={{ paddingVertical: 12, alignItems: 'center' }}>
+              <ActivityIndicator />
+            </View>
+          ) : (
+            <ScrollView
+              keyboardShouldPersistTaps="handled"
+              keyboardDismissMode="on-drag"
+              contentContainerStyle={{ paddingBottom: 0 }}
+            >
+              <Text variant="headlineSmall" style={{ marginBottom: 16, textAlign: 'left' }}>
+                {name}
+              </Text>
+
+              {isReadOnly ? (
                 <>
-                <Text variant="headlineSmall" style={{ marginBottom: 16, textAlign: 'left' }}>{name}</Text>
+                  <Text style={{ marginTop: 4, marginBottom: 6, opacity: 0.7 }}>Default unit</Text>
+                  <View style={styles.roChip}>
+                    <Text>{defaultUnit}</Text>
+                  </View>
 
-                {isReadOnly ? (
-                    // ---------------- CREW (READ-ONLY) ----------------
-                    <>
-                    <Text style={{ marginTop: 4, marginBottom: 6, opacity: 0.7 }}>
-                        Default unit
+                  <Text style={{ marginTop: 16, marginBottom: 6, opacity: 0.7 }}>Low threshold</Text>
+                  <View style={styles.roBox}>
+                    <Text style={lowThreshold.trim() === '' ? styles.roPlaceholder : undefined}>
+                      {lowThreshold.trim() !== '' ? lowThreshold : 'default'}
                     </Text>
-                    <View style={styles.roChip}><Text style={styles.roChipText}>{defaultUnit}</Text></View>
+                  </View>
 
-                    <Text style={{ marginTop: 16, marginBottom: 6, opacity: 0.7 }}>
-                        Low threshold
+                  <Text style={{ marginTop: 16, marginBottom: 6, opacity: 0.7 }}>Notes</Text>
+                  <View style={[styles.roBox, { minHeight: 72 }]}>
+                    <Text style={note ? undefined : styles.roPlaceholder}>
+                      {note || 'No notes'}
                     </Text>
-                    <View style={styles.roBox}>
-                        <Text style={[styles.roValue, lowThreshold.trim() === '' && styles.roPlaceholder]}>
-                            {lowThreshold.trim() !== '' ? lowThreshold : 'default'}
-                        </Text>
-                    </View>
-
-                    <Text style={{ marginTop: 16, marginBottom: 6, opacity: 0.7 }}>
-                        Notes
-                    </Text>
-                    <View style={[styles.roBox, { minHeight: 72 }]}>
-                        <Text style={note ? styles.roValue : styles.roPlaceholder}>
-                        {note || 'No notes'}
-                        </Text>
-                    </View>
-                    </>
-                ) : (
-                    // ---------------- MANAGER (EDITABLE) ----------------
-                    <>
-                    {/* Default unit (global) */}
-                    <Text style={{ marginTop: 4, marginBottom: 6, opacity: 0.7 }}>Default unit</Text>
-                    <Menu
-                        visible={unitMenuVisible}
-                        onDismiss={() => setUnitMenuVisible(false)}
-                        anchor={
-                            <TouchableOpacity
-                            activeOpacity={0.7}
-                            onPress={() => setUnitMenuVisible(true)}
-                            >
-                            <View style={styles.anchorBtn}>
-                                <Text style={styles.anchorBtnText}>{defaultUnit}</Text>
-                            </View>
-                            </TouchableOpacity>
-                        }
-                        anchorPosition="top"
-                        contentStyle={{
-                            maxHeight: 360,
-                            borderRadius: 12,
-                            overflow: 'hidden',
-                            paddingVertical: 0,
-                        }}
-                        >
-                        <ScrollView
-                            style={{ maxHeight: 360 }}
-                            keyboardShouldPersistTaps="handled"
-                            contentContainerStyle={{ paddingVertical: 8 }}
-                        >
-                            {allUnits.map((u) => (
-                            <Menu.Item
-                                key={u}
-                                title={u}
-                                onPress={() => {
-                                setDefaultUnit(u);
-                                setShowCustomUnit(false);
-                                setUnitMenuVisible(false);
-                                }}
-                            />
-                            ))}
-                            <Divider />
-                            <Menu.Item
-                            title="Type a custom unit…"
-                            onPress={() => {
-                                setShowCustomUnit(true);
-                                setUnitMenuVisible(false);
-                            }}
-                            />
-                        </ScrollView>
-                    </Menu>
-
-                    {showCustomUnit && (
-                        <TextInput
-                        ref={customUnitRef}
-                        mode="outlined"
-                        label="Custom unit"
-                        placeholder="e.g., case, lb, bag"
-                        value={defaultUnit}
-                        onChangeText={setDefaultUnit}
-                        style={{ marginTop: 8 }}
-                        />
-                    )}
-
-                    {/* Per-location threshold */}
-                    <Text style={{ marginTop: 16, marginBottom: 6, opacity: 0.7 }}>
-                        Low threshold
-                    </Text>
-                    <TextInput
-                        mode="outlined"
-                        keyboardType="number-pad"
-                        placeholder="default"
-                        value={lowThreshold}
-                        onChangeText={setLowThreshold}
-                    />
-                    {!validThreshold && (
-                        <Text style={{ color: 'red', marginTop: 4 }}>Enter a whole number.</Text>
-                    )}
-
-                    {/* Notes */}
-                    <Text style={{ marginTop: 16, marginBottom: 6, opacity: 0.7 }}>
-                        Notes
-                    </Text>
-                    <TextInput
-                        mode="outlined"
-                        placeholder="e.g., Avocados count by singles on weekdays"
-                        value={note}
-                        onChangeText={setNote}
-                        multiline
-                        numberOfLines={4}
-                    />
-                    </>
-                )}
+                  </View>
                 </>
-            )}
-            </Dialog.Content>
-            <Dialog.Actions>
-                {isReadOnly && (
-                    <Button onPress={onDismiss}>Close</Button>
-                )}
-
-                {!isReadOnly && (
-                    <Button onPress={onDismiss} disabled={saving}>
-                    Cancel
-                    </Button>
-                )}
-
-                {!isReadOnly && (
-                    <Button
-                    onPress={onSave}
-                    loading={saving}
-                    disabled={!validThreshold || loading}
+              ) : (
+                <>
+                  {/* Default unit */}
+                  <Text style={{ marginTop: 4, marginBottom: 6, opacity: 0.7 }}>Default unit</Text>
+                  <Menu
+                    visible={unitMenuVisible}
+                    onDismiss={() => setUnitMenuVisible(false)}
+                    anchor={
+                      <TouchableOpacity activeOpacity={0.7} onPress={() => setUnitMenuVisible(true)}>
+                        <View style={styles.anchorBtn}>
+                          <Text>{defaultUnit}</Text>
+                        </View>
+                      </TouchableOpacity>
+                    }
+                    anchorPosition="top"
+                    contentStyle={{
+                      maxHeight: 360,
+                      borderRadius: 12,
+                      overflow: 'hidden',
+                      paddingVertical: 0,
+                    }}
+                  >
+                    <ScrollView
+                      style={{ maxHeight: 360 }}
+                      keyboardShouldPersistTaps="handled"
+                      contentContainerStyle={{ paddingVertical: 8 }}
                     >
-                    Save
-                    </Button>
-                )}
-            </Dialog.Actions>
+                      {allUnits.map((u) => (
+                        <Menu.Item
+                          key={u}
+                          title={u}
+                          onPress={() => {
+                            setDefaultUnit(u);
+                            setShowCustomUnit(false);
+                            setUnitMenuVisible(false);
+                          }}
+                        />
+                      ))}
+                      <Divider />
+                      <Menu.Item
+                        title="Type a custom unit…"
+                        onPress={() => {
+                          setShowCustomUnit(true);
+                          setUnitMenuVisible(false);
+                        }}
+                      />
+                    </ScrollView>
+                  </Menu>
+
+                  {showCustomUnit && (
+                    <TextInput
+                      ref={customUnitRef}
+                      mode="outlined"
+                      label="Custom unit"
+                      placeholder="e.g., case, lb, bag"
+                      value={defaultUnit}
+                      onChangeText={setDefaultUnit}
+                      returnKeyType="done"
+                      blurOnSubmit
+                      onSubmitEditing={() => Keyboard.dismiss()}
+                      right={<TextInput.Icon icon="check" onPress={() => Keyboard.dismiss()} />}
+                      style={{ marginTop: 8 }}
+                    />
+                  )}
+
+                  {/* Low threshold */}
+                  <Text style={{ marginTop: 16, marginBottom: 6, opacity: 0.7 }}>Low threshold</Text>
+                  <TextInput
+                    mode="outlined"
+                    keyboardType="number-pad"
+                    placeholder="default"
+                    value={lowThreshold}
+                    onChangeText={setLowThreshold}
+                    onSubmitEditing={() => Keyboard.dismiss()}
+                    right={<TextInput.Icon icon="check" onPress={() => Keyboard.dismiss()} />}
+                  />
+                  {!validThreshold && (
+                    <Text style={{ color: 'red', marginTop: 4 }}>Enter a whole number.</Text>
+                  )}
+
+                  {/* Notes */}
+                  <Text style={{ marginTop: 16, marginBottom: 6, opacity: 0.7 }}>Notes</Text>
+                  <TextInput
+                    mode="outlined"
+                    placeholder="e.g., Avocados count by singles on weekdays"
+                    value={note}
+                    onChangeText={setNote}
+                    multiline
+                    numberOfLines={4}
+                    returnKeyType="done"
+                    onSubmitEditing={() => Keyboard.dismiss()}
+                    right={<TextInput.Icon icon="check" onPress={() => Keyboard.dismiss()} 
+                    style={{marginBottom: 0, paddingBottom:0}}/>}
+                  />
+                </>
+              )}
+            </ScrollView>
+          )}
+        </Dialog.Content>
+
+        <Dialog.Actions>
+          {isReadOnly && <Button onPress={onDismiss}>Close</Button>}
+
+          {!isReadOnly && (
+            <Button onPress={onDismiss} disabled={saving}>
+              Cancel
+            </Button>
+          )}
+
+          {!isReadOnly && (
+            <Button
+              onPress={() => {
+                Keyboard.dismiss();
+                onSave();
+              }}
+              loading={saving}
+              disabled={!validThreshold || loading}
+            >
+              Save
+            </Button>
+          )}
+        </Dialog.Actions>
       </Dialog>
     </Portal>
   );
