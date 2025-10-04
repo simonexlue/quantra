@@ -4,14 +4,16 @@
     "slug": "quantra",
     "version": "1.0.0",
     "orientation": "portrait",
-    "icon": "./assets/logo.png",
+    "newArchEnabled": false,
+    "icon": "./assets/icon.png",
     "userInterfaceStyle": "light",
-    "newArchEnabled": true,
+
     "splash": {
       "image": "./assets/logo.png",
       "resizeMode": "contain",
       "backgroundColor": "#ffffff"
     },
+
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "com.quantra.dev",
@@ -21,19 +23,25 @@
         "NSSpeechRecognitionUsageDescription": "We use speech recognition to transcribe your inventory updates."
       }
     },
+
     "android": {
       "package": "com.quantra.dev",
       "googleServicesFile": "./google-services.json",
       "permissions": ["RECORD_AUDIO"],
       "adaptiveIcon": {
-        "foregroundImage": "./assets/logo.png",
+        "foregroundImage": "./assets/icon.png",
         "backgroundColor": "#ffffff"
       },
-      "edgeToEdgeEnabled": true
+      "edgeToEdgeEnabled": true,
+      "splash": {
+        "image": "./assets/logo.png",
+        "resizeMode": "contain",
+        "backgroundColor": "#ffffff"
+      }
     },
-    "web": {
-      "favicon": "./assets/favicon.png"
-    },
+
+    "web": { "favicon": "./assets/favicon.png" },
+
     "plugins": [
       "@react-native-firebase/app",
       ["@react-native-voice/voice", {
