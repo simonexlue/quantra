@@ -4,4 +4,5 @@ export const COL = {
     currentInventory: 'currentInventory',
     users: 'users',
     locations: 'locations',
+    suppliers: 'suppliers',
 } as const;
