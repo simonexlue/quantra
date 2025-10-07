@@ -9,6 +9,8 @@ import { useAuth } from "../../auth/useAuth";
 import LoginScreen from "../../screens/LoginScreen";
 import InventoryListScreen from "../../screens/InventoryListScreen";
 import InventoryInputScreen from "../../screens/InventoryInputScreen";
+import ManagerRouteBuilderScreen from "../../screens/ManagerRouteBuilderScreen";
+
 import type { Supplier } from "../../types/catalog";
 import { fetchSuppliers } from "../../services/suppliersService";
 
@@ -45,19 +47,26 @@ function Row({
 }
 
 function CustomDrawerContent(props: any) {
-  const { signOut } = useAuth();
+  const { user, signOut } = useAuth();
+  const isManager = user?.role === "manager";
+
   const [suppliers, setSuppliers] = useState<Supplier[]>([]);
   const [open, setOpen] = useState(true);
 
   useEffect(() => {
-    fetchSuppliers().then(setSuppliers).catch(() => setSuppliers([]));
+    fetchSuppliers()
+      .then(setSuppliers)
+      .catch(() => setSuppliers([]));
   }, []);
 
   const activeRoute = props.state.routes[props.state.index];
   const activeSupplier =
     activeRoute?.name === "InventoryList" ? activeRoute?.params?.supplierId : undefined;
-  const isAllItems = activeRoute?.name === "InventoryList" && !activeSupplier;
-  const isNewCount = activeRoute?.name === "Input";
+
+  const isAllItems   = activeRoute?.name === "InventoryList" && !activeSupplier;
+  const isNewCount   = activeRoute?.name === "Input";
+  // track if Route Builder is active
+  const isRouteBuilder = activeRoute?.name === "RouteBuilder";
 
   return (
     <DrawerContentScrollView {...props} contentContainerStyle={{ flex: 1 }}>
@@ -70,6 +79,18 @@ function CustomDrawerContent(props: any) {
           props.navigation.closeDrawer();
         }}
       />
+
+      {/* Manager-only Route Builder entry */}
+      {isManager && (
+        <Row
+          label="Route Builder"
+          active={isRouteBuilder}
+          onPress={() => {
+            props.navigation.navigate("RouteBuilder");
+            props.navigation.closeDrawer();
+          }}
+        />
+      )}
 
       <Divider style={{ marginVertical: 12 }} />
 
@@ -133,7 +154,7 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
   },
-  rowText: { fontSize: 16, fontWeight: "400" }, 
+  rowText: { fontSize: 16, fontWeight: "400" },
 });
 
 function AppDrawer() {
@@ -153,6 +174,12 @@ function AppDrawer() {
         name="Input"
         component={InventoryInputScreen}
         options={{ title: "New Count", drawerItemStyle: { height: 0 } }}
+      />
+
+      <Drawer.Screen
+        name="RouteBuilder"
+        component={ManagerRouteBuilderScreen}
+        options={{ title: "Route Builder", drawerItemStyle: { height: 0 } }}
       />
     </Drawer.Navigator>
   );
