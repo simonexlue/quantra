@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useMemo } from "react";
-import { View, FlatList, StyleSheet } from "react-native";
+import { View, FlatList, StyleSheet, Platform } from "react-native";
 import { ActivityIndicator, Text, TextInput, Button, Card, IconButton } from "react-native-paper";
 import { SectionList, Switch } from "react-native";
 
@@ -53,6 +53,8 @@ export default function InventoryInputScreen() {
     unrecognizedParts: string[];
     parsedItems: string[];
   } | null>(null);
+
+  const SCALE = Platform.select({ ios: 0.66, android: 0.66 });
 
   // Maps itemId -> current qty
   const currentQtyByItem = useMemo(() => {
@@ -262,7 +264,13 @@ export default function InventoryInputScreen() {
           </Text>
           <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
             <Text style={{ opacity: 0.8 }}>Optimized Route</Text>
-            <Switch value={useRoute} onValueChange={setUseRoute} />
+            <Switch 
+              value={useRoute} 
+              onValueChange={setUseRoute}
+              style={{
+                transform: [{ scaleX: SCALE! }, { scaleY: SCALE! }],
+                marginVertical: Platform.OS === "ios" ? -2 : 0, // keeps it visually centered
+              }} />
           </View>
         </View>
         <Button
@@ -303,14 +311,15 @@ export default function InventoryInputScreen() {
         <SectionList
           sections={resolvedSections}
           keyExtractor={(it) => it.id}
-          style={{ flex: 1, width: "100%", alignSelf: "stretch" }}
+          style={{ flex: 1, width: "100%", alignSelf: "stretch"}}
           contentContainerStyle={styles.listContainer}
           scrollIndicatorInsets={{ right: -24 }}
+          stickySectionHeadersEnabled={false}
           ItemSeparatorComponent={() => <View style={styles.separator} />}
           renderSectionHeader={({ section }) => (
-            <View style={{ paddingVertical: 6, paddingHorizontal: 4 }}>
+            <View style={{ paddingVertical: 6, paddingHorizontal: 4, marginTop: 15}}>
               <Text variant="titleMedium">{section.title}</Text>
-              <View style={{ height: 1, backgroundColor: "#e0e0e0", marginTop: 6 }} />
+              <View style={{ height: 1, backgroundColor: "#e0e0e0", marginTop: 10 }} />
             </View>
           )}
           renderItem={({ item }) => {
@@ -389,7 +398,7 @@ export default function InventoryInputScreen() {
         onApply={applyApprovedLines}
       />
 
-      <MicButton onPress={() => setSpeechModalVisible(true)} label="Speak" />
+      <MicButton onPress={() => setSpeechModalVisible(true)} />
 
       <SpeechModal
         visible={speechModalVisible}
