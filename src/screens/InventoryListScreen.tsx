@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo } from "react";
 import { FlatList, View, StyleSheet } from "react-native";
-import { ActivityIndicator, Card, Text } from "react-native-paper";
+import { ActivityIndicator, Card, Text, Searchbar } from "react-native-paper";
 import { useAuth } from "../auth/useAuth";
 import { useInventory } from "../hooks/useInventory";
 import FlagPill from "../components/FlagPill";
@@ -24,13 +24,12 @@ export default function InventoryListScreen() {
 
   const [lastUpdateUserName, setLastUpdateUserName] = useState<string>("");
   const [overrides, setOverrides] = useState<Record<string, { lowThreshold: number }>>({});
-
   const [catalogMap, setCatalogMap] = useState<Record<string, CatalogItem>>({});
   const [catalogLoading, setCatalogLoading] = useState<boolean>(!!supplierFilter);
 
-  // Modal state MUST be before early returns
   const [modalOpen, setModalOpen] = useState(false);
   const [selectedItemId, setSelectedItemId] = useState<string | null>(null);
+  const [searchQuery, setSearchQuery] = useState("");
 
   // ---- Effects ----
   useEffect(() => {
@@ -96,38 +95,35 @@ export default function InventoryListScreen() {
   }, [rows]);
 
   const displayedRows = useMemo(() => {
-    if (!supplierFilter) return rows;
-    if (catalogLoading) return [];
-  
-    const want = String(supplierFilter).toLowerCase();
-  
-    return rows.filter((line) => {
-      const item = catalogMap[line.itemId];
-      if (!item) return false;
-  
-      // Gather possible supplier fields
-      const sources = [
-        (item as any).suppliers,          // string[]
-        (item as any).supplierId,         // string OR string[]
-        (item as any).primarySupplierId,  // string
-      ];
-  
-      // Normalize to a flat string[]
-      const list: string[] = sources
-        .flatMap((src) => {
-          if (!src) return [];
-          if (Array.isArray(src)) return src;
-          return [src]; // string
-        })
-        .map((s) => String(s).toLowerCase());
-  
-      if (!list.length) return false;
-      return list.includes(want);
-    });
-  }, [rows, catalogMap, supplierFilter, catalogLoading]);
-  
+    let base = rows;
 
-  // ---- Early returns AFTER all hooks ----
+    if (supplierFilter) {
+      if (catalogLoading) return [];
+      const want = String(supplierFilter).toLowerCase();
+      base = base.filter((line) => {
+        const item = catalogMap[line.itemId];
+        if (!item) return false;
+        const sources = [(item as any).suppliers, (item as any).supplierId, (item as any).primarySupplierId];
+        const list: string[] = sources
+          .flatMap((src) => (!src ? [] : Array.isArray(src) ? src : [src]))
+          .map((s) => String(s).toLowerCase());
+        return list.includes(want);
+      });
+    }
+
+    if (searchQuery.trim() !== "") {
+      const q = searchQuery.toLowerCase();
+      base = base.filter(
+        (it) =>
+          it.itemName?.toLowerCase().includes(q) ||
+          it.itemId?.toLowerCase().includes(q)
+      );
+    }
+
+    return base;
+  }, [rows, catalogMap, supplierFilter, catalogLoading, searchQuery]);
+
+  // ---- Early returns ----
   if (!user) {
     return (
       <View style={{ padding: 24 }}>
@@ -144,7 +140,6 @@ export default function InventoryListScreen() {
     );
   }
 
-  // ---- Helpers ----
   const formatDate = (timestamp: any) => {
     if (!timestamp) return "Unknown";
     const date = timestamp.toDate?.() || new Date(timestamp);
@@ -161,6 +156,27 @@ export default function InventoryListScreen() {
             Last updated: {formatDate(lastUpdate.updatedAt)} by {lastUpdateUserName || lastUpdate.updatedBy}
           </Text>
         )}
+
+        <Searchbar
+          placeholder="Search items"
+          value={searchQuery}
+          onChangeText={setSearchQuery}
+          onClearIconPress={() => setSearchQuery("")}
+          style={styles.searchBar}
+          inputStyle={styles.searchInput}
+          theme={{
+            roundness: 28, 
+            colors: {
+              surface: "#FFFFFF",
+              secondaryContainer: "#FFFFFF",
+              elevation: { level1: "#FFFFFF", level2: "#FFFFFF", level3: "#FFFFFF" } as any,
+        
+              // Text/icon colors
+              onSurfaceVariant: "rgba(0,0,0,0.35)", 
+              onSurface: "rgba(0,0,0,0.35)"
+            },
+          }}
+        />
       </View>
 
       <FlatList
@@ -213,8 +229,16 @@ const styles = StyleSheet.create({
   header: {
     paddingHorizontal: 24,
     paddingVertical: 16,
-    paddingBottom: 8,
     gap: 6,
+  },
+  searchBar: {
+    backgroundColor: "#FFFFFF",
+    borderRadius: 20,   
+    overflow: "hidden", 
+    marginTop: 8,
+  },
+  searchInput: {
+    color: "#000",
   },
   filterTag: {
     fontSize: 12,
@@ -228,7 +252,7 @@ const styles = StyleSheet.create({
   },
   listContainer: {
     padding: 16,
-    paddingTop: 8,
+    paddingTop: 0,
   },
   card: {
     marginHorizontal: 4,

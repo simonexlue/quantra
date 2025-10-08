@@ -155,54 +155,61 @@ export default function InventoryInputScreen() {
     });
   }
 
+    // --- REPLACE THIS FUNCTION IN InventoryInputScreen.tsx ---
   function analyzeSpeechText(rawText: string, parsed: any[], catalog: CatalogItem[]) {
-    const lowerText = rawText.toLowerCase();
+    const lowerText = String(rawText || "").toLowerCase();
     const recognizedParts: string[] = [];
 
-    // Collect all recognized item names and quantities
-    for (const line of parsed) {
+    function toArray<T>(maybe: T | T[] | null | undefined): T[] {
+      if (Array.isArray(maybe)) return maybe;
+      if (maybe == null) return [];
+      return [maybe];
+    }
+
+    // Build recognized parts (qty + item name + any synonyms)
+    for (const line of Array.isArray(parsed) ? parsed : []) {
       const item = catalog.find((i) => i.id === line.itemId);
-      if (item) {
-        recognizedParts.push(`${line.qty} ${item.name}`);
-        // Also check for synonyms
-        if (item.synonyms) {
-          item.synonyms.forEach((synonym) => {
-            if (lowerText.includes(synonym.toLowerCase())) {
-              recognizedParts.push(synonym);
-            }
-          });
-        }
+      const itemName = String(item?.name ?? item?.id ?? "").trim();
+      if (itemName) recognizedParts.push(`${line.qty} ${itemName}`);
+
+      // Robust to string or array for synonyms
+      const syns = toArray<string>(item?.synonyms as any);
+      for (const syn of syns) {
+        const s = String(syn || "").trim();
+        if (s) recognizedParts.push(s);
       }
     }
 
-    // Find unrecognized phrases (group consecutive unrecognized words)
+    // Find unrecognized phrases by scanning words
     const unrecognizedParts: string[] = [];
     const words = lowerText.split(/\s+/);
+    const filterWords = new Set(["and", "the", "a", "an", "to", "of", "in", "for", "with", "on"]);
 
     let currentPhrase: string[] = [];
 
     for (let i = 0; i < words.length; i++) {
       const word = words[i];
+      const isFilterWord = filterWords.has(word);
 
-      // Check if this word is recognized
-      const isRecognized = recognizedParts.some((part) => part.toLowerCase().includes(word));
-
-      // Skip common filter words
-      const isFilterWord = ["and", "the", "a", "an", "to", "of", "in", "for", "with", "on"].includes(word);
+      // treat a word as recognized if it appears inside any recognized part
+      let isRecognized = false;
+      for (let j = 0; j < recognizedParts.length; j++) {
+        const part = recognizedParts[j].toLowerCase();
+        if (part.indexOf(word) !== -1) {
+          isRecognized = true;
+          break;
+        }
+      }
 
       if (!isRecognized && !isFilterWord) {
-        // Add to current unrecognized phrase
         currentPhrase.push(word);
       } else {
-        // Word is recognized, finish current phrase if any
         if (currentPhrase.length > 0) {
           unrecognizedParts.push(currentPhrase.join(" "));
           currentPhrase = [];
         }
       }
     }
-
-    // Don't forget the last phrase if it ends with unrecognized words
     if (currentPhrase.length > 0) {
       unrecognizedParts.push(currentPhrase.join(" "));
     }
@@ -210,12 +217,14 @@ export default function InventoryInputScreen() {
     return {
       rawText,
       unrecognizedParts,
-      parsedItems: parsed.map((p) => {
+      parsedItems: (Array.isArray(parsed) ? parsed : []).map((p) => {
         const item = catalog.find((i) => i.id === p.itemId);
-        return item ? `${p.qty} ${item.name}` : `${p.qty} ${p.itemId}`;
+        const nm = String(item?.name ?? p.itemId);
+        return `${p.qty} ${nm}`;
       }),
     };
   }
+  
 
   function handleInputChange(itemId: string, value: string) {
     // Track that this input has been changed
