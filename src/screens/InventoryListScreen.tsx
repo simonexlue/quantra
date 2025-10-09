@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo } from "react";
 import { FlatList, View, StyleSheet } from "react-native";
-import { ActivityIndicator, Card, Text, Searchbar } from "react-native-paper";
+import { ActivityIndicator, Card, Text, Searchbar, useTheme } from "react-native-paper";
 import { useAuth } from "../auth/useAuth";
 import { useInventory } from "../hooks/useInventory";
 import FlagPill from "../components/FlagPill";
@@ -12,10 +12,12 @@ import { computeFlag } from "../constants/flags";
 import { useRoute } from "@react-navigation/native";
 import { fetchCatalog } from "../services/catalogService";
 import type { CatalogItem } from "../types/catalog";
+import { paperTheme } from "../theme/paperTheme";
 
 type RouteParams = { supplierId?: string };
 
 export default function InventoryListScreen() {
+  const theme = useTheme();
   const route = useRoute<any>();
   const supplierFilter: string | undefined = (route.params as RouteParams)?.supplierId;
 
@@ -192,12 +194,22 @@ export default function InventoryListScreen() {
           >
             <Card.Content style={styles.cardContent}>
               <View style={styles.row}>
-                <Text variant="titleMedium" style={[styles.colName, styles.left]} numberOfLines={1}>
-                  {item.itemName}
-                </Text>
-                <Text style={[styles.colQty, styles.left]}>
-                  {item.qty} {item.defaultUnit ?? "each"}
-                </Text>
+                {/* LEFT: name + qty+unit (stacked) */}
+                <View style={styles.leftBlock}>
+                  <Text
+                    variant="titleMedium"
+                    style={[styles.name, { color: theme.colors.primary }]}
+                    numberOfLines={1}
+                  >
+                    {item.itemName}
+                  </Text>
+        
+                  <Text style={[styles.subline, { color: theme.colors.onSurface }]} numberOfLines={1}>
+                    {item.qty} {item.defaultUnit ?? "each"}
+                  </Text>
+                </View>
+        
+                {/* RIGHT: flag */}
                 <View style={styles.colFlag}>
                   <FlagPill
                     flag={computeFlag(item.qty, {
@@ -231,15 +243,18 @@ const styles = StyleSheet.create({
     paddingVertical: 16,
     gap: 6,
   },
+
+  // Searchbar
   searchBar: {
-    backgroundColor: "#FFFFFF",
-    borderRadius: 20,   
-    overflow: "hidden", 
-    marginTop: 8,
+    backgroundColor: paperTheme.colors.surface, 
+    borderRadius: 15,
+    overflow: "hidden",
   },
   searchInput: {
-    color: "#000",
+    color: "#212121",
   },
+
+  // Header meta
   filterTag: {
     fontSize: 12,
     opacity: 0.8,
@@ -250,6 +265,8 @@ const styles = StyleSheet.create({
     opacity: 0.6,
     color: "#666",
   },
+
+  // List & cards
   listContainer: {
     padding: 16,
     paddingTop: 0,
@@ -261,20 +278,37 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: 1 },
     shadowOpacity: 0.05,
     shadowRadius: 2,
-    backgroundColor: "#fff",
+    backgroundColor: paperTheme.colors.surface, 
+    borderRadius: 16,
   },
   cardContent: {
     paddingHorizontal: 16,
     paddingVertical: 12,
   },
+
+  // Row layout
   row: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
   },
-  left: { textAlign: "left" },
-  colName: { flex: 1, fontWeight: "500", paddingRight: 8 },
-  colQty: { width: 120 },
-  colFlag: { width: 56, alignItems: "flex-start" },
+  leftBlock: {
+    flex: 1,
+    paddingRight: 8,
+  },
+  name: {
+    fontWeight: "700",
+    fontSize: 18,
+  },
+  subline: {
+    marginTop: 2,
+    fontSize: 16,
+    fontWeight: "500"
+  },
+  colFlag: {
+    width: 56,
+    alignItems: "flex-start",
+  },
+
   separator: { height: 8 },
 });

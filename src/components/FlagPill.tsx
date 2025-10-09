@@ -1,21 +1,41 @@
-import React from "react";
-import { Text, View } from "react-native";
+import React, { memo } from "react";
+import { View, StyleSheet } from "react-native";
+import { Text } from "react-native-paper";
 
-export default function FlagPill({ flag} : {flag: 'ok' | 'low' | 'out'}) {
+type Flag = "ok" | "low" | "out" | "OK" | "LOW" | "OUT" | null | undefined;
 
-    const bg = flag === 'ok' ? '#2e7d32' : flag === 'low' ? '#f9a825' : '#c62828';
-    const fg = 'white';
-    return (
-        <View style={{
-            backgroundColor: bg,
-            paddingHorizontal: 6,
-            paddingVertical: 2,
-            borderRadius: 4,
-            alignSelf: 'flex-start'
-        }}>
-            <Text style={{ color: fg, fontSize: 12, fontWeight: 'bold' }}>
-                {flag.toUpperCase()}
-            </Text>
-        </View>
-    )
-}
+const COLORS = {
+  ok:  "#4CAF50", // green
+  low: "#00BCD4", // teal
+  out: "#E53935", // red
+} as const;
+
+export default memo(function FlagPill({ flag }: { flag: Flag }) {
+  if (!flag) return null;
+
+  const f = String(flag).toLowerCase() as keyof typeof COLORS;
+  const bg = COLORS[f] ?? COLORS.ok;
+
+  return (
+    <View style={[styles.pill, { backgroundColor: bg }]}>
+      <Text style={styles.label}>{f.toUpperCase()}</Text>
+    </View>
+  );
+});
+
+const styles = StyleSheet.create({
+  pill: {
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 999,
+    alignSelf: "flex-start",
+    minWidth: 44,
+    alignItems: "center",
+  },
+  label: {
+    color: "#fff",
+    fontSize: 12,
+    fontWeight: "700",
+    letterSpacing: 0.5,
+  },
+});

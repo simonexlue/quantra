@@ -2,7 +2,7 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { View, StyleSheet, ScrollView, TouchableOpacity, Keyboard, Platform } from 'react-native';
 import {
   Portal, Dialog, Button, Text, TextInput,
-  Menu, Divider, ActivityIndicator
+  Menu, Divider, ActivityIndicator, useTheme
 } from 'react-native-paper';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import {
@@ -25,6 +25,8 @@ type Props = {
 export default function ItemDetailModal({
   visible, onDismiss, itemId, locationId, canEditGlobal = true
 }: Props) {
+
+  const theme = useTheme();
 
   const isReadOnly = !canEditGlobal;
   const [loading, setLoading] = useState(false);
@@ -165,27 +167,35 @@ export default function ItemDetailModal({
               keyboardDismissMode="on-drag"
               contentContainerStyle={{ paddingBottom: 0 }}
             >
-              <Text variant="headlineSmall" style={{ marginBottom: 16, textAlign: 'left' }}>
+              <Text variant="headlineSmall" style={{ marginBottom: 16, textAlign: 'left', color: theme.colors.primary, fontWeight: 500 }}>
                 {name}
               </Text>
 
               {isReadOnly ? (
                 <>
+                  {/* Default unit */}
                   <Text style={{ marginTop: 4, marginBottom: 6, opacity: 0.7 }}>Default unit</Text>
                   <View style={styles.roChip}>
-                    <Text>{defaultUnit}</Text>
+                    <Text style={styles.roChipText}>{defaultUnit}</Text>
                   </View>
 
+                  {/* Low threshold */}
                   <Text style={{ marginTop: 16, marginBottom: 6, opacity: 0.7 }}>Low threshold</Text>
                   <View style={styles.roBox}>
-                    <Text style={lowThreshold.trim() === '' ? styles.roPlaceholder : undefined}>
+                    <Text
+                      style={[
+                        styles.roValue,
+                        lowThreshold.trim() === '' && styles.roPlaceholder,
+                      ]}
+                    >
                       {lowThreshold.trim() !== '' ? lowThreshold : 'default'}
                     </Text>
                   </View>
 
+                  {/* Notes */}
                   <Text style={{ marginTop: 16, marginBottom: 6, opacity: 0.7 }}>Notes</Text>
                   <View style={[styles.roBox, { minHeight: 72 }]}>
-                    <Text style={note ? undefined : styles.roPlaceholder}>
+                    <Text style={[styles.roValue, !note && styles.roPlaceholder]}>
                       {note || 'No notes'}
                     </Text>
                   </View>
@@ -193,13 +203,13 @@ export default function ItemDetailModal({
               ) : (
                 <>
                   {/* Default unit */}
-                  <Text style={{ marginTop: 4, marginBottom: 6, opacity: 0.7 }}>Default unit</Text>
+                  <Text style={{ marginTop: 4, marginBottom: 6, opacity: 1, fontWeight: 500 }}>Default unit</Text>
                   <Menu
                     visible={unitMenuVisible}
                     onDismiss={() => setUnitMenuVisible(false)}
                     anchor={
                       <TouchableOpacity activeOpacity={0.7} onPress={() => setUnitMenuVisible(true)}>
-                        <View style={styles.anchorBtn}>
+                        <View style={[styles.anchorBtn, { borderColor: theme.colors.primary, borderWidth: 0.75 }]}>
                           <Text>{defaultUnit}</Text>
                         </View>
                       </TouchableOpacity>
@@ -252,11 +262,13 @@ export default function ItemDetailModal({
                       onSubmitEditing={() => Keyboard.dismiss()}
                       right={<TextInput.Icon icon="check" onPress={() => Keyboard.dismiss()} />}
                       style={{ marginTop: 8 }}
+                      outlineColor={theme.colors.primary}
+                      activeOutlineColor={theme.colors.primary}
                     />
                   )}
 
                   {/* Low threshold */}
-                  <Text style={{ marginTop: 16, marginBottom: 6, opacity: 0.7 }}>Low threshold</Text>
+                  <Text style={{ marginTop: 16, marginBottom: 6, opacity: 1, fontWeight: 500 }}>Low threshold</Text>
                   <TextInput
                     mode="outlined"
                     keyboardType="number-pad"
@@ -265,13 +277,17 @@ export default function ItemDetailModal({
                     onChangeText={setLowThreshold}
                     onSubmitEditing={() => Keyboard.dismiss()}
                     right={<TextInput.Icon icon="check" onPress={() => Keyboard.dismiss()} />}
+                    outlineColor={theme.colors.primary}
+                    activeOutlineColor={theme.colors.primary}
+                    theme={{ roundness: 22 }}
+                    outlineStyle={{ borderWidth: 0.75 }}
                   />
                   {!validThreshold && (
                     <Text style={{ color: 'red', marginTop: 4 }}>Enter a whole number.</Text>
                   )}
 
                   {/* Notes */}
-                  <Text style={{ marginTop: 16, marginBottom: 6, opacity: 0.7 }}>Notes</Text>
+                  <Text style={{ marginTop: 16, marginBottom: 6, opacity: 1 ,fontWeight: 500}}>Notes</Text>
                   <TextInput
                     mode="outlined"
                     placeholder="e.g., Avocados count by singles on weekdays"
@@ -283,6 +299,10 @@ export default function ItemDetailModal({
                     onSubmitEditing={() => Keyboard.dismiss()}
                     right={<TextInput.Icon icon="check" onPress={() => Keyboard.dismiss()} 
                     style={{marginBottom: 0, paddingBottom:0}}/>}
+                    outlineColor={theme.colors.primary}
+                    activeOutlineColor={theme.colors.primary}
+                    theme={{ roundness: 22 }}
+                    outlineStyle={{ borderWidth: 0.75 }}
                   />
                 </>
               )}
@@ -307,6 +327,9 @@ export default function ItemDetailModal({
               }}
               loading={saving}
               disabled={!validThreshold || loading}
+              buttonColor={theme.colors.primary}
+              textColor='white'
+              style={{paddingHorizontal: 10, marginLeft: 10}}
             >
               Save
             </Button>
@@ -322,26 +345,37 @@ const styles = StyleSheet.create({
     marginVertical: 20,
   },
   roChip: {
-    alignSelf: 'flex-start',
+    alignSelf: "flex-start",
     paddingHorizontal: 12,
     paddingVertical: 6,
     borderRadius: 999,
-    backgroundColor: 'rgba(0,0,0,0.06)',
+    backgroundColor: "#EEF2F6",  
+    borderWidth: 1,
+    borderColor: "#D0D5DD", 
   },
-  roChipText: { 
+  roChipText: {
     fontSize: 14,
-    fontWeight: 400,
+    color: "#344054", 
+    fontWeight: "500",
   },
+
   roBox: {
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: 'rgba(0,0,0,0.15)',
-    borderRadius: 12,
+    borderWidth: 1,               
+    borderColor: "#E4E7EC",      
+    borderRadius: 14,        
     paddingHorizontal: 14,
     paddingVertical: 12,
-    backgroundColor: 'rgba(0,0,0,0.03)',
+    backgroundColor: "#F2F4F7",  
   },
-  roValue: { fontSize: 16 },
-  roPlaceholder: { fontSize: 16, opacity: 0.5 },
+  roValue: {
+    fontSize: 16,
+    color: "#344054",
+  },
+  roPlaceholder: {
+    fontSize: 16,
+    color: "#98A2B3",  
+  },
+
   anchorBtn: {
     alignSelf: 'flex-start',
     paddingHorizontal: 16,

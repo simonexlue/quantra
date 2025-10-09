@@ -1,26 +1,33 @@
-import { StatusBar } from 'expo-status-bar';
-import { StyleSheet, Text, View } from 'react-native';
-import React, { useEffect } from 'react';
-import { getApp } from '@react-native-firebase/app';
-import RootNavigator from './src/app/navigation/RootNavigator';
-import { AppProviders } from './src/app/AppProviders';
-import { AuthProvider } from './src/auth/useAuth';
+import React from "react";
+import { StatusBar } from "expo-status-bar";
+import { StyleSheet, Text, View } from "react-native";
+
+import RootNavigator from "./src/app/navigation/RootNavigator";
+import { AppProviders } from "./src/app/AppProviders";
+import { AuthProvider } from "./src/auth/useAuth";
+
+import { PaperProvider } from "react-native-paper";
+import { paperTheme } from "./src/theme/paperTheme";
 
 export default function App() {
   try {
     return (
-      <AppProviders>
-        <AuthProvider>
-          <RootNavigator />
-        </AuthProvider>
-      </AppProviders>
+      <PaperProvider theme={paperTheme}>
+        <StatusBar style="light" backgroundColor={paperTheme.colors.background} />
+
+        <AppProviders>
+          <AuthProvider>
+            <RootNavigator />
+          </AuthProvider>
+        </AppProviders>
+      </PaperProvider>
     );
   } catch (error) {
-    console.error('App Error:', error);
+    console.error("App Error:", error);
     return (
-      <View style={styles.container}>
-        <Text style={styles.text}>App Error - Check Console</Text>
-        <StatusBar style="auto" />
+      <View style={[styles.container, { backgroundColor: "#121212" }]}>
+        <Text style={[styles.text, { color: "#FFFFFF" }]}>App Error - Check Console</Text>
+        <StatusBar style="light" />
       </View>
     );
   }
@@ -29,13 +36,11 @@ export default function App() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#fff',
-    alignItems: 'center',
-    justifyContent: 'center',
+    alignItems: "center",
+    justifyContent: "center",
   },
   text: {
     fontSize: 24,
-    fontWeight: 'bold',
-    color: '#333',
+    fontWeight: "bold",
   },
 });
