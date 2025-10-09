@@ -7,7 +7,6 @@ import {
   LayoutAnimation,
   UIManager,
 } from "react-native";
-import { FlatList as GHFlatList } from "react-native-gesture-handler";
 import DraggableFlatList, { RenderItemParams } from "react-native-draggable-flatlist";
 import {
   Button,
@@ -17,8 +16,9 @@ import {
   Divider,
   ActivityIndicator,
   TextInput,
-  TouchableRipple,   // <-- add
+  TouchableRipple,
 } from "react-native-paper";
+
 import { useAuth } from "../auth/useAuth";
 import { useLocationSections, type LocationSection } from "../hooks/useLocationSections";
 import {
@@ -33,14 +33,20 @@ import { fetchCatalog } from "../services/catalogService";
 import MultiSelectModal from "../components/MultiSelectModal";
 import type { CatalogItem } from "../types/catalog";
 
+type ScrollRef = {
+  scrollToOffset: (opts: { offset: number; animated?: boolean }) => void;
+};
+
 // Enable LayoutAnimation on Android
 if (Platform.OS === "android" && UIManager.setLayoutAnimationEnabledExperimental) {
   UIManager.setLayoutAnimationEnabledExperimental(true);
 }
 
 export default function ManagerRouteBuilderScreen() {
+  const listRef = useRef<ScrollRef | null>(null);
   const { user } = useAuth();
   const { sections, loading } = useLocationSections(user?.locationId);
+
   const [adding, setAdding] = useState(false);
   const [renamingId, setRenamingId] = useState<string | null>(null);
   const [renameText, setRenameText] = useState("");
@@ -50,8 +56,20 @@ export default function ManagerRouteBuilderScreen() {
   const [catalog, setCatalog] = useState<CatalogItem[]>([]);
   const [busy, setBusy] = useState(false);
 
-  // NEW: collapsed state (ids of collapsed sections)
+  // --- Collapsed state ---
+  // Keep ids of sections that are collapsed.
   const [collapsedIds, setCollapsedIds] = useState<Set<string>>(new Set());
+  // Only initialize "all collapsed" once when we first receive sections.
+  const didInitCollapse = useRef(false);
+
+  useEffect(() => {
+    if (!didInitCollapse.current && sections.length > 0) {
+      didInitCollapse.current = true;
+      // Collapse everything on first load
+      setCollapsedIds(new Set(sections.map((s) => s.id)));
+    }
+  }, [sections]);
+
   const toggleCollapsed = (id: string) => {
     LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
     setCollapsedIds((prev) => {
@@ -60,13 +78,6 @@ export default function ManagerRouteBuilderScreen() {
       return next;
     });
   };
-
-  const listRef = useRef<GHFlatList<LocationSection> | null>(null);
-
-  requestAnimationFrame(() => {
-    listRef.current?.scrollToOffset?.({ offset: 0, animated: true });
-    listRef.current?.scrollToIndex?.({ index: 0, animated: true });
-  });
 
   useEffect(() => {
     fetchCatalog().then(setCatalog);
@@ -87,19 +98,29 @@ export default function ManagerRouteBuilderScreen() {
     );
   }
 
-  const empty = sections.length === 0;
-
   async function handleCreate() {
     if (!user?.locationId) return;
     setAdding(true);
     try {
+      // Create new section at top
       const newId = await createSection(user.locationId, "New Section");
       const newOrder = [newId, ...sections.map((s) => s.id)];
       await reorderSections(user.locationId, newOrder);
+
+      // Prepare for inline rename
       setRenamingId(newId);
       setRenameText("New Section");
+
+      // Ensure the new top item is visible (scroll-to-top ONLY here)
       requestAnimationFrame(() => {
-        listRef.current?.scrollToOffset?.({ offset: 0, animated: true });
+        listRef.current?.scrollToOffset({ offset: 0, animated: true });
+      });
+
+      // Expand the newly added section (keep others as user left them)
+      setCollapsedIds((prev) => {
+        const next = new Set(prev);
+        next.delete(newId);
+        return next;
       });
     } finally {
       setAdding(false);
@@ -109,15 +130,17 @@ export default function ManagerRouteBuilderScreen() {
   async function commitRename(id: string) {
     if (!user?.locationId) return;
     setBusy(true);
-    await renameSection(user.locationId, id, renameText.trim() || "Section");
+    await renameSection(user.locationId, id, (renameText || "Section").trim());
     setBusy(false);
     setRenamingId(null);
     Keyboard.dismiss();
+    // No scroll here.
   }
 
   async function handleReorder(newData: LocationSection[]) {
     if (!user?.locationId) return;
     await reorderSections(user.locationId, newData.map((s) => s.id));
+    // No scroll here.
   }
 
   function startRename(id: string, currentName: string) {
@@ -125,7 +148,7 @@ export default function ManagerRouteBuilderScreen() {
     setRenameText(currentName);
   }
 
-  async function openAddItems(sectionId: string) {
+  function openAddItems(sectionId: string) {
     setPickerTarget(sectionId);
     const sec = sections.find((s) => s.id === sectionId);
     setPickerInitialSelected(sec?.itemIds ?? []);
@@ -139,6 +162,7 @@ export default function ManagerRouteBuilderScreen() {
     setBusy(false);
     setPickerOpen(false);
     setPickerTarget(null);
+    // No scroll here.
   }
 
   async function handleRemoveItem(sectionId: string, itemId: string) {
@@ -146,6 +170,7 @@ export default function ManagerRouteBuilderScreen() {
     setBusy(true);
     await removeItemFromSection(user.locationId, sectionId, itemId);
     setBusy(false);
+    // No scroll here.
   }
 
   const renderItem = ({ item, drag, isActive }: RenderItemParams<LocationSection>) => {
@@ -156,7 +181,7 @@ export default function ManagerRouteBuilderScreen() {
       <Card style={{ marginBottom: 12, opacity: isActive ? 0.9 : 1 }}>
         <Card.Content>
           {/* Header row */}
-          <View style={{ flexDirection: "row", alignItems: "center", gap: 0, paddingBottom: 6 }}>
+          <View style={{ flexDirection: "row", alignItems: "center", paddingBottom: 6 }}>
             {isRenaming ? (
               <TextInput
                 mode="outlined"
@@ -179,10 +204,10 @@ export default function ManagerRouteBuilderScreen() {
                 }
               />
             ) : (
-              // Tappable left side toggles collapse
+              // Tap left area to collapse/expand
               <TouchableRipple
                 onPress={() => toggleCollapsed(item.id)}
-                style={{ flex: 1, borderRadius: 8, paddingVertical: 4, paddingHorizontal: 0 }}
+                style={{ flex: 1, borderRadius: 8, paddingVertical: 4 }}
               >
                 <View style={{ flexDirection: "row", alignItems: "center" }}>
                   <IconButton
@@ -190,7 +215,10 @@ export default function ManagerRouteBuilderScreen() {
                     size={20}
                     style={{ margin: 0, marginRight: 2 }}
                   />
-                  <Text style={{ flex: 1, fontSize: 16, fontWeight: "600", paddingLeft: 0 }} numberOfLines={1}>
+                  <Text
+                    style={{ flex: 1, fontSize: 16, fontWeight: "600" }}
+                    numberOfLines={1}
+                  >
                     {item.name}
                   </Text>
                 </View>
@@ -204,7 +232,11 @@ export default function ManagerRouteBuilderScreen() {
                 <IconButton icon="pencil" onPress={() => startRename(item.id, item.name)} style={{ margin: 0 }} />
                 <IconButton icon="plus" onPress={() => openAddItems(item.id)} style={{ margin: 0 }} />
                 <IconButton icon="drag" onLongPress={drag} style={{ margin: 0 }} />
-                <IconButton icon="delete" onPress={() => deleteSection(user.locationId!, item.id)} style={{ margin: 0 }} />
+                <IconButton
+                  icon="delete"
+                  onPress={() => deleteSection(user.locationId!, item.id)}
+                  style={{ margin: 0 }}
+                />
               </>
             )}
           </View>
@@ -228,7 +260,7 @@ export default function ManagerRouteBuilderScreen() {
                         paddingVertical: 8,
                       }}
                     >
-                      <Text style={{paddingLeft: 40}}>{it?.name ?? id}</Text>
+                      <Text style={{ paddingLeft: 40 }}>{it?.name ?? id}</Text>
                       <IconButton icon="close" onPress={() => handleRemoveItem(item.id, id)} />
                     </View>
                   );
@@ -276,7 +308,7 @@ export default function ManagerRouteBuilderScreen() {
             </View>
 
             <DraggableFlatList<LocationSection>
-              ref={listRef}
+              ref={listRef as unknown as any}
               data={sections}
               keyExtractor={(s) => s.id}
               onDragEnd={({ data }) => handleReorder(data)}
@@ -286,6 +318,7 @@ export default function ManagerRouteBuilderScreen() {
               containerStyle={{ paddingBottom: 16 }}
               showsVerticalScrollIndicator={false}
               persistentScrollbar={false}
+              // Don’t auto-jump; we control scrolling ourselves (only on add section)
             />
           </>
         )}
