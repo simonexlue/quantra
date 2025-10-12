@@ -1,6 +1,14 @@
 import React, { useEffect, useState, useMemo } from "react";
 import { View, FlatList, StyleSheet, Platform } from "react-native";
-import { ActivityIndicator, Text, TextInput, Button, Card, IconButton } from "react-native-paper";
+import {
+  ActivityIndicator,
+  Text,
+  TextInput,
+  Button,
+  Card,
+  IconButton,
+  useTheme,
+} from "react-native-paper";
 import { SectionList, Switch } from "react-native";
 
 import { useAuth } from "../auth/useAuth";
@@ -17,37 +25,29 @@ import { useLocationSections } from "../hooks/useLocationSections";
 export default function InventoryInputScreen() {
   const { user } = useAuth();
 
-  // Toggle for the manager-defined route
+  // Theme colors
+  const { colors } = useTheme();
+  const NAVY = colors.primary; // headings + labels
+
   const [useRoute, setUseRoute] = useState(true);
 
-  // Manager-created sections for this location
-  const {
-    sections: routeSections,
-    loading: loadingSections
-  } = useLocationSections(user?.locationId);
+  const { sections: routeSections, loading: loadingSections } =
+    useLocationSections(user?.locationId);
 
-  // Catalog items
   const [items, setItems] = useState<CatalogItem[]>([]);
   const [loadingCatalog, setLoadingCatalog] = useState(true);
 
-  // Current inventory (live, per location)
   const { rows: currentRows, loading: loadingInventory } = useInventory(user?.locationId);
 
-  // Text inputs (no blanks)
   const [saving, setSaving] = useState(false);
   const [drafts, setDrafts] = useState<Record<string, string>>({}); // itemId -> qty text
 
-  // Speech modal
   const [speechModalVisible, setSpeechModalVisible] = useState(false);
-
-  // Track which inputs have been changed from their original values
   const [changedInputs, setChangedInputs] = useState<Set<string>>(new Set());
 
-  // Confirm chips sheet
   const [confirmVisible, setConfirmVisible] = useState(false);
   const [pendingParsed, setPendingParsed] = useState<{ itemId: string; qty: number }[]>([]);
 
-  // Track speech analysis for highlighting unrecognized text
   const [speechAnalysis, setSpeechAnalysis] = useState<{
     rawText: string;
     unrecognizedParts: string[];
@@ -56,40 +56,36 @@ export default function InventoryInputScreen() {
 
   const SCALE = Platform.select({ ios: 0.66, android: 0.66 });
 
-  // Maps itemId -> current qty
   const currentQtyByItem = useMemo(() => {
     const m: Record<string, number> = {};
     for (const r of currentRows) m[r.itemId] = r.qty;
     return m;
   }, [currentRows]);
 
-  // Load catalog once
   useEffect(() => {
     fetchCatalog()
       .then((arr: CatalogItem[]) => {
         const sorted = [...arr].sort((a, b) => (a.name ?? a.id).localeCompare(b.name ?? b.id));
         setItems(sorted);
-        setDrafts(Object.fromEntries(sorted.map((it) => [it.id, ""]))); // Blank template for each item
+        setDrafts(Object.fromEntries(sorted.map((it) => [it.id, ""]))); // start empty
       })
       .finally(() => setLoadingCatalog(false));
   }, []);
 
-  // Only save lines the user actually typed, and only if numeric
   const linesToSave = useMemo(() => {
     const out: { itemId: string; qty: number }[] = [];
     for (const it of items) {
       const txt = (drafts[it.id] ?? "").trim();
-      if (txt === "") continue; // untouched -> do not write
+      if (txt === "") continue; // untouched
       const num = Number(txt);
-      if (!Number.isFinite(num)) continue; // guard against '.', '', etc.
+      if (!Number.isFinite(num)) continue;
       const prev = currentQtyByItem[it.id];
-      if (prev !== undefined && prev === num) continue; // no change
+      if (prev !== undefined && prev === num) continue; // no actual change
       out.push({ itemId: it.id, qty: num });
     }
     return out;
   }, [items, drafts, currentQtyByItem]);
 
-  // Build sections -> CatalogItem[] (only when toggle ON and sections exist)
   const resolvedSections = useMemo(() => {
     if (!useRoute || !routeSections.length) return null;
     const byId = new Map(items.map((i) => [i.id, i]));
@@ -110,16 +106,14 @@ export default function InventoryInputScreen() {
         updatedBy: user.uid,
         lines: linesToSave,
       });
-      // After a successful save, clear only the rows you edited so the placeholders (current counts) show again
+      // clear only the edited rows
       setDrafts((d) => {
         const copy = { ...d };
-        for (const { itemId } of linesToSave) {
-          copy[itemId] = "";
-        }
+        for (const { itemId } of linesToSave) copy[itemId] = "";
         return copy;
       });
-      setChangedInputs(new Set()); // Clear highlighting after successful save
-      setSpeechAnalysis(null); // Clear speech analysis after successful save
+      setChangedInputs(new Set());
+      setSpeechAnalysis(null);
     } finally {
       setSaving(false);
     }
@@ -128,124 +122,88 @@ export default function InventoryInputScreen() {
   function handleSpeechConfirm(text: string) {
     if (!text.trim()) return;
     const parsed = parseSpeechToLines(text, items);
-
     const analysis = analyzeSpeechText(text, parsed, items);
     setSpeechAnalysis(analysis);
-
     if (!parsed.length) return;
-
-    // Don't write into drafts yet — let the user review first
     setPendingParsed(parsed);
     setConfirmVisible(true);
   }
 
   function applyApprovedLines(approved: { itemId: string; qty: number }[]) {
-    // track changed inputs
     const changedItemIds = new Set(changedInputs);
     for (const line of approved) changedItemIds.add(line.itemId);
     setChangedInputs(changedItemIds);
 
-    // merge into drafts
     setDrafts((d) => {
       const copy = { ...d };
-      for (const line of approved) {
-        copy[line.itemId] = String(line.qty);
-      }
+      for (const line of approved) copy[line.itemId] = String(line.qty);
       return copy;
     });
   }
 
-    // --- REPLACE THIS FUNCTION IN InventoryInputScreen.tsx ---
   function analyzeSpeechText(rawText: string, parsed: any[], catalog: CatalogItem[]) {
     const lowerText = String(rawText || "").toLowerCase();
     const recognizedParts: string[] = [];
+    const toArray = <T,>(x: T | T[] | null | undefined): T[] =>
+      Array.isArray(x) ? x : x == null ? [] : [x as T];
 
-    function toArray<T>(maybe: T | T[] | null | undefined): T[] {
-      if (Array.isArray(maybe)) return maybe;
-      if (maybe == null) return [];
-      return [maybe];
-    }
-
-    // Build recognized parts (qty + item name + any synonyms)
     for (const line of Array.isArray(parsed) ? parsed : []) {
       const item = catalog.find((i) => i.id === line.itemId);
       const itemName = String(item?.name ?? item?.id ?? "").trim();
       if (itemName) recognizedParts.push(`${line.qty} ${itemName}`);
-
-      // Robust to string or array for synonyms
-      const syns = toArray<string>(item?.synonyms as any);
-      for (const syn of syns) {
+      for (const syn of toArray<string>(item?.synonyms as any)) {
         const s = String(syn || "").trim();
         if (s) recognizedParts.push(s);
       }
     }
 
-    // Find unrecognized phrases by scanning words
     const unrecognizedParts: string[] = [];
     const words = lowerText.split(/\s+/);
-    const filterWords = new Set(["and", "the", "a", "an", "to", "of", "in", "for", "with", "on"]);
-
-    let currentPhrase: string[] = [];
-
-    for (let i = 0; i < words.length; i++) {
-      const word = words[i];
-      const isFilterWord = filterWords.has(word);
-
-      // treat a word as recognized if it appears inside any recognized part
-      let isRecognized = false;
-      for (let j = 0; j < recognizedParts.length; j++) {
-        const part = recognizedParts[j].toLowerCase();
-        if (part.indexOf(word) !== -1) {
-          isRecognized = true;
+    const filter = new Set(["and", "the", "a", "an", "to", "of", "in", "for", "with", "on"]);
+    let current: string[] = [];
+    for (const w of words) {
+      const isFilter = filter.has(w);
+      let ok = false;
+      for (const p of recognizedParts) {
+        if (p.toLowerCase().includes(w)) {
+          ok = true;
           break;
         }
       }
-
-      if (!isRecognized && !isFilterWord) {
-        currentPhrase.push(word);
-      } else {
-        if (currentPhrase.length > 0) {
-          unrecognizedParts.push(currentPhrase.join(" "));
-          currentPhrase = [];
-        }
+      if (!ok && !isFilter) current.push(w);
+      else if (current.length) {
+        unrecognizedParts.push(current.join(" "));
+        current = [];
       }
     }
-    if (currentPhrase.length > 0) {
-      unrecognizedParts.push(currentPhrase.join(" "));
-    }
-
+    if (current.length) unrecognizedParts.push(current.join(" "));
     return {
       rawText,
       unrecognizedParts,
       parsedItems: (Array.isArray(parsed) ? parsed : []).map((p) => {
         const item = catalog.find((i) => i.id === p.itemId);
-        const nm = String(item?.name ?? p.itemId);
-        return `${p.qty} ${nm}`;
+        return `${p.qty} ${String(item?.name ?? p.itemId)}`;
       }),
     };
   }
-  
 
-  function handleInputChange(itemId: string, value: string) {
-    // Track that this input has been changed
-    const originalValue = currentQtyByItem[itemId] != null ? String(currentQtyByItem[itemId]) : "";
-    const hasChanged = value !== originalValue;
+  // Track edits; if equals original or blank, clear draft
+  function handleInputChange(itemId: string, raw: string) {
+    const clean = raw.replace(/[^\d.]/g, "");
+    const original = currentQtyByItem[itemId];
+    const originalText = original != null ? String(original) : "";
+    const isChanged = clean !== "" && clean !== originalText;
 
     setChangedInputs((prev) => {
-      const newSet = new Set(prev);
-      if (hasChanged) {
-        newSet.add(itemId);
-      } else {
-        newSet.delete(itemId);
-      }
-      return newSet;
+      const next = new Set(prev);
+      if (isChanged) next.add(itemId);
+      else next.delete(itemId);
+      return next;
     });
 
-    // Update the draft
-    setDrafts((d) => ({ ...d, [itemId]: value }));
+    setDrafts((d) => ({ ...d, [itemId]: isChanged ? clean : "" }));
   }
 
-  // Loading guard: include sections only when using route view
   const baseLoading = loadingCatalog || loadingInventory;
   const combinedLoading = baseLoading || (useRoute && loadingSections);
 
@@ -264,22 +222,58 @@ export default function InventoryInputScreen() {
     );
   }
 
+  // ---- render one row ----
+  const renderLine = (item: CatalogItem) => {
+    const placeholder =
+      currentQtyByItem[item.id] != null ? String(currentQtyByItem[item.id]) : "—";
+
+    const draftText = drafts[item.id] ?? "";
+    const isChanged = changedInputs.has(item.id) && draftText !== "";
+
+    return (
+      <Card style={styles.card}>
+        <Card.Content style={styles.cardContent}>
+          <View style={styles.row}>
+            <Text style={[styles.label, { color: NAVY }]}>{item.name ?? item.id}</Text>
+
+            <TextInput
+              mode="outlined"
+              keyboardType="numeric"
+              placeholder={placeholder}
+              value={drafts[item.id] ?? ""}
+              onChangeText={(t) => handleInputChange(item.id, t)}
+              // changed -> primary, otherwise leave default
+              {...(isChanged ? { textColor: NAVY } : {})}
+              style={[styles.input, isChanged && styles.changedInput]}
+              contentStyle={[styles.inputContent, isChanged && styles.changedContent]}
+              outlineStyle={styles.inputOutline}
+              dense
+            />
+
+            <Text style={styles.unit}>{item.defaultUnit ?? "each"}</Text>
+          </View>
+        </Card.Content>
+      </Card>
+    );
+  };
+
   return (
     <View style={styles.container}>
       <View style={styles.header}>
         <View style={styles.titleSection}>
-          <Text variant="titleLarge" style={{ marginBottom: 6 }}>
+          <Text variant="titleLarge" style={{ marginBottom: 6, color: NAVY }}>
             Inventory Entry
           </Text>
           <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
             <Text style={{ opacity: 0.8 }}>Optimized Route</Text>
-            <Switch 
-              value={useRoute} 
+            <Switch
+              value={useRoute}
               onValueChange={setUseRoute}
               style={{
                 transform: [{ scaleX: SCALE! }, { scaleY: SCALE! }],
-                marginVertical: Platform.OS === "ios" ? -2 : 0, // keeps it visually centered
-              }} />
+                marginVertical: Platform.OS === "ios" ? -2 : 0,
+              }}
+            />
           </View>
         </View>
         <Button
@@ -287,7 +281,7 @@ export default function InventoryInputScreen() {
           onPress={handleSave}
           loading={saving}
           disabled={saving || linesToSave.length === 0}
-          compact={true}
+          compact
           style={styles.saveButton}
           contentStyle={styles.saveButtonContent}
         >
@@ -300,12 +294,7 @@ export default function InventoryInputScreen() {
         <View style={styles.speechAnalysis}>
           <View style={styles.speechAnalysisHeader}>
             <Text style={styles.speechAnalysisTitle}>Unrecognized Text</Text>
-            <IconButton
-              icon="close"
-              size={20}
-              onPress={() => setSpeechAnalysis(null)}
-              style={styles.dismissButton}
-            />
+            <IconButton icon="close" size={20} onPress={() => setSpeechAnalysis(null)} style={styles.dismissButton} />
           </View>
           <View style={styles.speechTextContainer}>
             <Text style={styles.speechText}>{speechAnalysis.unrecognizedParts.join(", ")}</Text>
@@ -320,45 +309,20 @@ export default function InventoryInputScreen() {
         <SectionList
           sections={resolvedSections}
           keyExtractor={(it) => it.id}
-          style={{ flex: 1, width: "100%", alignSelf: "stretch"}}
+          style={{ flex: 1, width: "100%", alignSelf: "stretch" }}
           contentContainerStyle={styles.listContainer}
           scrollIndicatorInsets={{ right: -24 }}
           stickySectionHeadersEnabled={false}
           ItemSeparatorComponent={() => <View style={styles.separator} />}
           renderSectionHeader={({ section }) => (
-            <View style={{ paddingVertical: 6, paddingHorizontal: 4, marginTop: 15}}>
-              <Text variant="titleMedium">{section.title}</Text>
+            <View style={{ paddingVertical: 6, paddingHorizontal: 4, marginTop: 15 }}>
+              <Text variant="titleMedium" style={{ color: NAVY }}>
+                {section.title}
+              </Text>
               <View style={{ height: 1, backgroundColor: "#e0e0e0", marginTop: 10 }} />
             </View>
           )}
-          renderItem={({ item }) => {
-            const placeholder =
-              currentQtyByItem[item.id] != null ? String(currentQtyByItem[item.id]) : "—";
-            return (
-              <Card style={styles.card}>
-                <Card.Content style={styles.cardContent}>
-                  <View style={styles.row}>
-                    <Text style={styles.label}>{item.name ?? item.id}</Text>
-                    <TextInput
-                      mode="outlined"
-                      keyboardType="numeric"
-                      placeholder={placeholder}
-                      value={drafts[item.id] ?? ""}
-                      onChangeText={(t) => {
-                        const cleanValue = t.replace(/[^\d.]/g, "");
-                        handleInputChange(item.id, cleanValue);
-                      }}
-                      style={[styles.input, changedInputs.has(item.id) && styles.changedInput]}
-                      contentStyle={[styles.inputContent, changedInputs.has(item.id) && styles.changedContent]}
-                      outlineStyle={styles.inputOutline}
-                      dense
-                    />
-                    <Text style={styles.unit}>{item.defaultUnit ?? "each"}</Text>
-                  </View>
-                </Card.Content>
-              </Card>
-            );
-          }}
+          renderItem={({ item }) => renderLine(item)}
         />
       ) : (
         <FlatList
@@ -368,34 +332,7 @@ export default function InventoryInputScreen() {
           contentContainerStyle={styles.listContainer}
           scrollIndicatorInsets={{ right: -24 }}
           ItemSeparatorComponent={() => <View style={styles.separator} />}
-          renderItem={({ item }) => {
-            const placeholder =
-              currentQtyByItem[item.id] != null ? String(currentQtyByItem[item.id]) : "—";
-            return (
-              <Card style={styles.card}>
-                <Card.Content style={styles.cardContent}>
-                  <View style={styles.row}>
-                    <Text style={styles.label}>{item.name ?? item.id}</Text>
-                    <TextInput
-                      mode="outlined"
-                      keyboardType="numeric"
-                      placeholder={placeholder}
-                      value={drafts[item.id] ?? ""}
-                      onChangeText={(t) => {
-                        const cleanValue = t.replace(/[^\d.]/g, "");
-                        handleInputChange(item.id, cleanValue);
-                      }}
-                      style={[styles.input, changedInputs.has(item.id) && styles.changedInput]}
-                      contentStyle={[styles.inputContent, changedInputs.has(item.id) && styles.changedContent]}
-                      outlineStyle={styles.inputOutline}
-                      dense
-                    />
-                    <Text style={styles.unit}>{item.defaultUnit ?? "each"}</Text>
-                  </View>
-                </Card.Content>
-              </Card>
-            );
-          }}
+          renderItem={({ item }) => renderLine(item)}
         />
       )}
 
@@ -419,87 +356,37 @@ export default function InventoryInputScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    padding: 24
-  },
-  pad: {
-    padding: 24
-  },
+  container: { flex: 1, padding: 24 },
+  pad: { padding: 24 },
   header: {
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "flex-start",
-    marginBottom: 16
+    marginBottom: 16,
   },
-  titleSection: {
-    flex: 1,
-    marginRight: 16
-  },
-  saveButton: {
-    alignSelf: "flex-start",
-    borderRadius: 15
-  },
-  saveButtonContent: {
-    paddingHorizontal: 8,
-    paddingVertical: 0
-  },
-  listContainer: {
-    paddingVertical: 8
-  },
+  titleSection: { flex: 1, marginRight: 16 },
+  saveButton: { alignSelf: "flex-start", borderRadius: 15 },
+  saveButtonContent: { paddingHorizontal: 8, paddingVertical: 0 },
+  listContainer: { paddingVertical: 8 },
   card: {
     marginHorizontal: 4,
-    elevation: 2, // Android shadow
-    shadowColor: "#000", // iOS shadow
-    shadowOffset: {
-      width: 0,
-      height: 1
-    },
+    elevation: 2,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 1 },
     shadowOpacity: 0.05,
     shadowRadius: 2,
-    backgroundColor: "#fff"
+    backgroundColor: "#fff",
   },
-  cardContent: {
-    paddingHorizontal: 16,
-    paddingVertical: 12
-  },
-  row: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 12
-  },
-  label: {
-    flex: 1,
-    fontSize: 16
-  },
-  input: {
-    width: 80
-  },
-  inputContent: {
-    borderRadius: 16
-  },
-  inputOutline: {
-    borderRadius: 16
-  },
-  unit: {
-    width: 70,
-    opacity: 0.6
-  },
-  separator: {
-    height: 8
-  },
-  fab: {
-    position: "absolute",
-    margin: 16,
-    right: 0,
-    bottom: 0
-  },
-  changedInput: {
-    backgroundColor: "#e3f2fd"
-  },
-  changedContent: {
-    backgroundColor: "#e3f2fd"
-  },
+  cardContent: { paddingHorizontal: 16, paddingVertical: 12 },
+  row: { flexDirection: "row", alignItems: "center", gap: 12 },
+  label: { flex: 1, fontSize: 16 },
+  input: { width: 80 },
+  inputContent: { borderRadius: 16 },
+  inputOutline: { borderRadius: 16 },
+  unit: { width: 70, opacity: 0.6 },
+  separator: { height: 8 },
+  changedInput: { backgroundColor: "#e8eefc" },
+  changedContent: { backgroundColor: "#e8eefc" },
   speechAnalysis: {
     backgroundColor: "#fff3cd",
     borderColor: "#ffeaa7",
@@ -507,39 +394,17 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     padding: 12,
     marginHorizontal: 4,
-    marginBottom: 8
+    marginBottom: 8,
   },
   speechAnalysisHeader: {
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
-    marginBottom: 8
+    marginBottom: 8,
   },
-  speechAnalysisTitle: {
-    fontSize: 14,
-    fontWeight: "600",
-    color: "#856404",
-    flex: 1
-  },
-  dismissButton: {
-    margin: 0,
-    width: 20,
-    height: 20
-  },
-  speechTextContainer: {
-    backgroundColor: "#fff",
-    borderRadius: 4,
-    padding: 8,
-    marginBottom: 8
-  },
-  speechText: {
-    fontSize: 13,
-    lineHeight: 18,
-    color: "#333"
-  },
-  speechAnalysisNote: {
-    fontSize: 11,
-    color: "#856404",
-    fontStyle: "italic"
-  }
+  speechAnalysisTitle: { fontSize: 14, fontWeight: "600", color: "#856404", flex: 1 },
+  dismissButton: { margin: 0, width: 20, height: 20 },
+  speechTextContainer: { backgroundColor: "#fff", borderRadius: 4, padding: 8, marginBottom: 8 },
+  speechText: { fontSize: 13, lineHeight: 18, color: "#333" },
+  speechAnalysisNote: { fontSize: 11, color: "#856404", fontStyle: "italic" },
 });
